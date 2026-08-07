@@ -20,7 +20,11 @@
 import {
   Session,
   Think,
+  type ChatResponseResult,
   type MessageConcurrency,
+  type StepContext,
+  type ToolCallContext,
+  type ToolCallResultContext,
   type TurnConfig,
   type TurnContext,
 } from '@cloudflare/think'
@@ -40,6 +44,7 @@ import { getSandbox, type Sandbox as SandboxDO } from '@cloudflare/sandbox'
 import { getPooledDb } from '@garden/db/runtime'
 import { and, asc, eq, or, type SQL } from 'drizzle-orm'
 import { Result } from 'better-result'
+import { Effect, Layer, ManagedRuntime, Option, Schema, Stream } from 'effect'
 import { connectorRegistry } from '@garden/connectors'
 import { createGardenLogger } from '@garden/observability/logger'
 import * as schema from '@garden/db/schema'
@@ -49,12 +54,13 @@ import {
   type SandboxExecResult,
 } from './sandbox-debug'
 import { createAgentModel } from './model'
+import { AiObservation } from './ai-observation'
 import {
   classifyGardenContextOverflow,
   configureThinkCompaction,
   createGardenContextOverflow,
 } from './think-compaction'
-import { createGardenSkillSources } from './skills'
+import { loadRuntimeSkillAssignments, loadRuntimeSkillSources } from './skills'
 import {
   PostgresAgentPromptCatalog,
   createPromptContextProviders,
@@ -74,6 +80,26 @@ import {
   registerUploadedDocument,
   resolveDocumentEdit,
 } from './documents/document-tools'
+import {
+  DocumentArtifactEvent,
+  DocumentArtifactValidationError,
+  DocumentOperation,
+  toDocumentArtifactRpcError,
+} from './documents/document-artifact-model'
+import {
+  DocumentArtifactEvents,
+  documentArtifactOperationEvent,
+  documentArtifactEventsLayer,
+} from './documents/document-artifact-events'
+import {
+  DocumentArtifactEngine,
+  documentArtifactEngineLayer,
+} from './documents/document-artifact-engine'
+import {
+  DocumentArtifactProjection,
+  documentArtifactProjectionLayer,
+} from './documents/document-artifact-projection'
+import { makeDocumentArtifactDurableRepositoryLayer } from './documents/document-artifact-repository'
 import { IssueRunSubAgent } from './issue-run-sub-agent'
 import { AutomationRunSubAgent } from './automation-run-sub-agent'
 import {
@@ -88,12 +114,16 @@ type AgentRuntimeEnv = Cloudflare.Env & {
   BETTER_AUTH_URL: string
   HYPERDRIVE: Hyperdrive
   DISCORD_BOT_TOKEN?: string
+  EXA_API_KEY?: string
   AI: Ai
   AI_GATEWAY_ID?: string
+  ENVIRONMENT?: string
+  VITE_PUBLIC_POSTHOG_HOST?: string
+  VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?: string
   FILES: R2Bucket
   LOADER: WorkerLoader
   Sandbox: DurableObjectNamespace<SandboxDO>
-  MCP_SESSION: DurableObjectNamespace
+  EXECUTOR_MCP_SESSION: DurableObjectNamespace
   RUN_WORKFLOW: RunWorkflowBinding
 }
 
@@ -318,6 +348,15 @@ type ThreadDocumentVersionsPayload = Awaited<
 type ThreadDocumentEditPayload = Awaited<
   ReturnType<ChatSubAgent['resolveDocumentEdit']>
 >
+type ThreadDocumentArtifactPayload = Awaited<
+  ReturnType<ChatSubAgent['readDocumentArtifact']>
+>
+type ThreadDocumentArtifactOperationPayload = Awaited<
+  ReturnType<ChatSubAgent['applyDocumentArtifactOperation']>
+>
+type ThreadDocumentArtifactSubscription = Awaited<
+  ReturnType<ChatSubAgent['subscribeDocumentArtifact']>
+>
 const THINK_TURN_MAX_RETRIES = 1
 const THINK_TURN_TELEMETRY_FUNCTION_ID = 'garden.workspace-agent.turn'
 const agentRuntimeLogger = createGardenLogger({
@@ -326,6 +365,25 @@ const agentRuntimeLogger = createGardenLogger({
 })
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const documentArtifactEventJson = Schema.fromJsonString(DocumentArtifactEvent)
+const documentArtifactEventEncoder = new TextEncoder()
+
+/** Encodes one validated collaboration event using the SSE wire grammar. */
+const encodeDocumentArtifactEvent = (
+  event: typeof DocumentArtifactEvent.Type,
+): Effect.Effect<Uint8Array, unknown> =>
+  Effect.gen(function* () {
+    const revision = DocumentArtifactEvent.match<number>(event, {
+      Snapshot: ({ snapshot }) => snapshot.revision,
+      Operation: ({ revision }) => revision,
+    })
+    const json = yield* Schema.encodeUnknownEffect(documentArtifactEventJson)(
+      event,
+    )
+    return documentArtifactEventEncoder.encode(
+      `id: ${revision}\nevent: artifact\ndata: ${json}\n\n`,
+    )
+  }).pipe(Effect.withSpan('DocumentArtifactEvents.encodeSse'))
 
 type LiveAgentStatePayload = DebugMetaPayload & {
   workspace: DebugWorkspacePayload
@@ -522,6 +580,44 @@ export class AgentDO extends Agent<AgentRuntimeEnv> {
     await this.requireThreadAccess(threadId)
     const thread = await this.subAgent(ChatSubAgent, threadId)
     return thread.resolveDocumentEdit(input)
+  }
+
+  @callable()
+  async readThreadDocumentArtifact(
+    threadId: string,
+    documentId: string,
+  ): Promise<ThreadDocumentArtifactPayload> {
+    await this.requireThreadAccess(threadId)
+    const thread = await this.subAgent(ChatSubAgent, threadId)
+    return thread.readDocumentArtifact(documentId)
+  }
+
+  @callable()
+  async applyThreadDocumentArtifactOperation(
+    threadId: string,
+    input: { documentId: string; operation: unknown },
+  ): Promise<ThreadDocumentArtifactOperationPayload> {
+    await this.requireThreadAccess(threadId)
+    const thread = await this.subAgent(ChatSubAgent, threadId)
+    return thread.applyDocumentArtifactOperation(
+      input.documentId,
+      input.operation,
+    )
+  }
+
+  /**
+   * Opens the facet-owned document stream after the same thread authorization
+   * used by reads and writes. Native Workers RPC transfers the backpressured
+   * stream; the browser-facing Effect HttpApi adapter supplies SSE semantics.
+   */
+  @callable()
+  async subscribeThreadDocumentArtifact(
+    threadId: string,
+    documentId: string,
+  ): Promise<ThreadDocumentArtifactSubscription> {
+    await this.requireThreadAccess(threadId)
+    const thread = await this.subAgent(ChatSubAgent, threadId)
+    return thread.subscribeDocumentArtifact(documentId)
   }
 
   @callable()
@@ -1024,10 +1120,31 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
     super(ctx, env)
   }
 
+  /**
+   * Builds document services once per facet lifetime. Durable Object storage is
+   * canonical; the Effect runtime retains only service resources and the
+   * synchronization primitive that serializes overlapping artifact mutations.
+   */
+  private readonly documentArtifactRuntime = ManagedRuntime.make(
+    Layer.merge(
+      Layer.merge(
+        documentArtifactEngineLayer.pipe(
+          Layer.provide(
+            makeDocumentArtifactDurableRepositoryLayer(this.ctx.storage),
+          ),
+        ),
+        documentArtifactProjectionLayer,
+      ),
+      documentArtifactEventsLayer,
+    ),
+  )
+
   override messageConcurrency: MessageConcurrency = 'merge'
   override chatRecovery = true
   override contextOverflow = createGardenContextOverflow()
   override classifyChatError = classifyGardenContextOverflow
+  private readonly aiObservation = new AiObservation(this.ctx, this.env)
+  private mcpController: RuntimeMcpController | null = null
   private readonly mcpConnectionPreparer = new RuntimeMcpConnectionPreparer({
     getController: () => this.getMcpController(),
     fullSyncIntervalMs: mcpRuntimeConfig.connectorFullSyncIntervalMs,
@@ -1042,14 +1159,13 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
     continuingWithoutReadyMessage:
       '[agent-runtime] continuing without warmed chat MCP connectors',
     onSuccessfulRefresh: (controller) => {
-      Result.match(controller.captureObservedMcpToolChanges(), {
-        ok: () => undefined,
-        err: (error) =>
-          console.warn(
-            '[agent-runtime] failed to capture warmed chat MCP tool changes',
-            error,
-          ),
-      })
+      const captured = controller.captureObservedMcpToolChanges()
+      if (captured.isErr()) {
+        console.warn(
+          '[agent-runtime] failed to capture warmed chat MCP tool changes',
+          captured.error,
+        )
+      }
     },
     onThreadNotFound: async (reason, controller) =>
       await this.pauseMcpRuntime(reason, controller),
@@ -1063,6 +1179,7 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
   getModel(): LanguageModel {
     return createAgentModel({
       ai: this.env.AI,
+      env: this.env,
       gatewayId: this.env.AI_GATEWAY_ID,
     })
   }
@@ -1077,28 +1194,20 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
       .withCachedPrompt()
   }
 
-  override async getSkills() {
-    const db = getPooledDb(this.env.HYPERDRIVE.connectionString)
-    const [thread] = await db
-      .select({ agentId: schema.chatThread.agentId })
-      .from(schema.chatThread)
-      .where(
-        or(
-          eq(schema.chatThread.id, this.name),
-          eq(schema.chatThread.runtimeKey, this.name),
-        ),
-      )
-      .limit(1)
-
-    return createGardenSkillSources({
-      bucket: this.env.FILES,
-      agentId: thread?.agentId ?? null,
-    })
+  override getSkills() {
+    return loadRuntimeSkillSources(
+      {
+        bucket: this.env.FILES,
+        databaseUrl: this.env.HYPERDRIVE.connectionString,
+      },
+      { kind: 'chat', id: this.name },
+    )
   }
 
   override getTools() {
     return createChatSubAgentTools({
       ctx: this.ctx,
+      ...(this.env.EXA_API_KEY ? { exaApiKey: this.env.EXA_API_KEY } : {}),
       databaseUrl: this.env.HYPERDRIVE.connectionString,
       threadId: this.name,
       workspace: this.workspace,
@@ -1120,12 +1229,117 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
     filename: string
     mediaType?: string | null
   }) {
-    return registerUploadedDocument({
+    const upload = await registerUploadedDocument({
       context: this.getDocumentToolContext(),
       filename: input.filename,
       mediaType: input.mediaType ?? null,
       bytes: Buffer.from(input.base64, 'base64'),
     })
+    if (
+      !upload.ok ||
+      !upload.document_id ||
+      !input.filename.toLowerCase().endsWith('.docx')
+    ) {
+      return upload
+    }
+
+    const canonical = await this.documentArtifactRuntime.runPromise(
+      Effect.gen(function* () {
+        const projection = yield* DocumentArtifactProjection
+        const engine = yield* DocumentArtifactEngine
+        const initial = yield* projection.importDocx(
+          input.filename,
+          Buffer.from(input.base64, 'base64'),
+        )
+        return yield* engine.initialize(upload.document_id, initial)
+      }).pipe(
+        Effect.match({
+          onFailure: (error) => ({
+            ok: false as const,
+            error: toDocumentArtifactRpcError(error),
+          }),
+          onSuccess: (snapshot) => ({ ok: true as const, snapshot }),
+        }),
+      ),
+    )
+    return { ...upload, canonical }
+  }
+
+  /** Reads canonical editable state from this thread facet's durable storage. */
+  async readDocumentArtifact(documentId: string) {
+    return this.documentArtifactRuntime.runPromise(
+      Effect.gen(function* () {
+        const engine = yield* DocumentArtifactEngine
+        return yield* engine.get(documentId)
+      }).pipe(
+        Effect.match({
+          onFailure: (error) => ({
+            ok: false as const,
+            error: toDocumentArtifactRpcError(error),
+          }),
+          onSuccess: (snapshot) => ({ ok: true as const, snapshot }),
+        }),
+      ),
+    )
+  }
+
+  /** Applies one decoded, idempotent block command at the RPC boundary. */
+  async applyDocumentArtifactOperation(documentId: string, operation: unknown) {
+    return this.documentArtifactRuntime.runPromise(
+      Effect.gen(function* () {
+        const engine = yield* DocumentArtifactEngine
+        const events = yield* DocumentArtifactEvents
+        const command = yield* Schema.decodeUnknownEffect(DocumentOperation)(
+          operation,
+        ).pipe(
+          Effect.mapError(
+            (cause) =>
+              new DocumentArtifactValidationError({
+                operation: 'apply operation',
+                message: String(cause),
+              }),
+          ),
+        )
+        const outcome = yield* engine.apply(documentId, command)
+        const event = documentArtifactOperationEvent({
+          documentId,
+          operation: command,
+          outcome,
+        })
+        if (Option.isSome(event)) {
+          yield* events.publish(event.value)
+        }
+        return outcome
+      }).pipe(
+        Effect.match({
+          onFailure: (error) => ({
+            ok: false as const,
+            error: toDocumentArtifactRpcError(error),
+          }),
+          onSuccess: (outcome) => ({ ok: true as const, outcome }),
+        }),
+      ),
+    )
+  }
+
+  /**
+   * Streams an initial snapshot followed by compact accepted operations. The
+   * Effect PubSub subscription is scoped to the returned Web stream, so native
+   * RPC cancellation releases it without a manual subscriber map. Effect's
+   * installed `Stream.toReadableStreamEffect` captures this runtime context and
+   * interrupts its producer fiber from the Web Stream `cancel()` callback.
+   */
+  async subscribeDocumentArtifact(documentId: string) {
+    return this.documentArtifactRuntime.runPromise(
+      Effect.gen(function* () {
+        const engine = yield* DocumentArtifactEngine
+        const events = yield* DocumentArtifactEvents
+        const stream: Stream.Stream<Uint8Array, unknown> = events
+          .subscribe(documentId, engine.get(documentId))
+          .pipe(Stream.mapEffect(encodeDocumentArtifactEvent))
+        return yield* Stream.toReadableStreamEffect(stream)
+      }),
+    )
   }
 
   async readDocumentBytes(documentId: string) {
@@ -1254,32 +1468,13 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
     const slugs = explicitSkillSlugsFromMessages(ctx.messages)
     if (slugs.length === 0) return ''
 
-    const db = getPooledDb(this.env.HYPERDRIVE.connectionString)
-    const [thread] = await db
-      .select({ agentId: schema.chatThread.agentId })
-      .from(schema.chatThread)
-      .where(
-        or(
-          eq(schema.chatThread.id, this.name),
-          eq(schema.chatThread.runtimeKey, this.name),
-        ),
-      )
-      .limit(1)
-    if (!thread) return ''
-
-    const assignedRows = await db
-      .select({
-        name: schema.skill.name,
-        slug: schema.skill.slug,
-      })
-      .from(schema.agentSkill)
-      .innerJoin(schema.skill, eq(schema.skill.id, schema.agentSkill.skillId))
-      .where(
-        and(
-          eq(schema.agentSkill.agentId, thread.agentId),
-          eq(schema.agentSkill.enabled, true),
-        ),
-      )
+    const assignedRows = await loadRuntimeSkillAssignments(
+      {
+        bucket: this.env.FILES,
+        databaseUrl: this.env.HYPERDRIVE.connectionString,
+      },
+      { kind: 'chat', id: this.name },
+    )
 
     const assignedByToken = new Map<string, string>()
     for (const row of assignedRows) {
@@ -1311,15 +1506,43 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
   }
 
   override async beforeTurn(ctx: TurnContext) {
-    const mcpController = this.getMcpController()
-    Result.match(mcpController.captureObservedMcpToolChanges(), {
-      ok: () => undefined,
-      err: (error) =>
-        console.warn(
-          '[agent-runtime] failed to capture MCP tool changes',
-          error,
+    const [identity] = await this.getDb()
+      .select({
+        id: schema.chatThread.id,
+        workspaceId: schema.chatThread.workspaceId,
+        ownerUserId: schema.chatThread.ownerUserId,
+        agentId: schema.chatThread.agentId,
+      })
+      .from(schema.chatThread)
+      .where(
+        or(
+          eq(schema.chatThread.id, this.name),
+          eq(schema.chatThread.runtimeKey, this.name),
         ),
-    })
+      )
+      .limit(1)
+    if (identity) {
+      this.aiObservation.startTurn(
+        {
+          runtimeKind: 'chat',
+          distinctId: identity.ownerUserId,
+          workspaceId: identity.workspaceId,
+          agentId: identity.agentId,
+          threadId: identity.id,
+          sessionId: `chat:${identity.id}`,
+        },
+        ctx,
+      )
+    }
+
+    const mcpController = this.getMcpController()
+    const captured = mcpController.captureObservedMcpToolChanges()
+    if (captured.isErr()) {
+      console.warn(
+        '[agent-runtime] failed to capture MCP tool changes',
+        captured.error,
+      )
+    }
 
     const documentContext =
       ctx.body &&
@@ -1359,6 +1582,12 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
     })
 
     return {
+      model: createAgentModel({
+        ai: this.env.AI,
+        env: this.env,
+        gatewayId: this.env.AI_GATEWAY_ID,
+        tracing: this.aiObservation.modelTracing(),
+      }),
       experimental_telemetry: {
         functionId: THINK_TURN_TELEMETRY_FUNCTION_ID,
         isEnabled: true,
@@ -1377,6 +1606,23 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
       tools: stableMcpTools,
       activeTools,
     } satisfies TurnConfig
+  }
+
+  override async beforeToolCall(ctx: ToolCallContext) {
+    this.aiObservation.beforeToolCall(ctx)
+    return undefined
+  }
+
+  override async afterToolCall(ctx: ToolCallResultContext) {
+    this.aiObservation.afterToolCall(ctx)
+  }
+
+  override async onStepFinish(ctx: StepContext) {
+    this.aiObservation.stepFinished(ctx)
+  }
+
+  override async onChatResponse(result: ChatResponseResult) {
+    this.aiObservation.finishTurn(result)
   }
 
   override async onRequest(request: Request) {
@@ -1419,7 +1665,7 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
         'bun --version',
         'python3 --version',
         'git --version',
-        'rg --version | head -n 1',
+        'grep --version | head -n 1',
       ].join(' && '),
       {
         cwd: '/workspace',
@@ -2013,6 +2259,8 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
   }
 
   private getMcpController() {
+    if (this.mcpController) return this.mcpController
+
     const host: McpHost = {
       name: this.name,
       env: this.env,
@@ -2020,15 +2268,17 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
       mcp: this.mcp,
       getServerStates: () =>
         this.getMcpServers().servers as RuntimeMcpServerStates,
-      addRpcMcpServer: async ({ connectorId, id, props }) =>
+      addExecutorMcpServer: async ({ id, props }) =>
         await this.addMcpServer(
-          connectorId,
-          this.env.MCP_SESSION as unknown as DurableObjectNamespace<McpAgent>,
+          id,
+          this.env
+            .EXECUTOR_MCP_SESSION as unknown as DurableObjectNamespace<McpAgent>,
           { id, props },
         ),
       removeMcpServer: this.removeMcpServer.bind(this),
     }
-    return new RuntimeMcpController(host)
+    this.mcpController = new RuntimeMcpController(host)
+    return this.mcpController
   }
 
   private async pauseMcpRuntime(
