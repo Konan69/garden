@@ -39,7 +39,7 @@ export type AppEnv = {
   DISCORD_BOT_TOKEN?: string
   DISCORD_PUBLIC_KEY?: string
   DISCORD_BOT_PERMISSIONS?: string
-  RESEND_API_KEY: RequiredEnvBinding<'RESEND_API_KEY'>
+  RESEND_API_KEY?: string
   VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?: string
   VITE_PUBLIC_POSTHOG_HOST?: string
 }

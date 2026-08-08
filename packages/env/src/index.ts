@@ -22,7 +22,7 @@ const serverSchema = {
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   SLACK_CLIENT_ID: z.string().min(1).optional(),
   SLACK_CLIENT_SECRET: z.string().min(1).optional(),
-  RESEND_API_KEY: z.string().min(1),
+  RESEND_API_KEY: z.string().min(1).optional(),
   // Optional: absent in environments that don't need web search. The web tools
   // report an unconfigured error to the model rather than failing the turn.
   EXA_API_KEY: z.string().min(1).optional(),

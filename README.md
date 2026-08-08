@@ -93,7 +93,7 @@ Browser ──── TanStack Start (CF Workers/Pages) ────── Postgr
 | Styling          | Tailwind CSS v4 (CSS-first, no config file)                                                                                   |
 | State            | Zustand (client) + TanStack Query (server)                                                                                    |
 | Editor           | TipTap (issues, skills, comments)                                                                                             |
-| Auth             | [Better Auth](https://www.better-auth.com) (email code + Google OAuth)                                                        |
+| Auth             | [Better Auth](https://www.better-auth.com) (email/password + Google OAuth)                                                    |
 | Agent runtime    | [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/) on Durable Objects                                         |
 | Code execution   | [Cloudflare Sandboxes](https://developers.cloudflare.com/sandbox/)                                                            |
 | Control plane DB | Postgres ([Neon](https://neon.tech)) via [Drizzle ORM](https://orm.drizzle.team)                                              |
@@ -146,7 +146,7 @@ garden/
 - [Node.js](https://nodejs.org) (v22.12+)
 - [pnpm](https://pnpm.io) (v10.33.0)
 - A Postgres database ([Neon](https://neon.tech) recommended)
-- Docker Desktop or Docker Engine if you want local Cloudflare Sandbox/container execution
+- Docker Desktop or Docker Engine only for remote-binding development with Sandbox containers
 - Cloudflare Wrangler auth when you need to manage deployed Worker resources
 
 ### Setup
@@ -168,8 +168,10 @@ cp .env.example .env
 #   BETTER_AUTH_URL=http://localhost:3000
 #   ENVIRONMENT=development
 #
-#   Optional, connector-specific:
-#   GitHub / Google / Slack keys if you use those connectors
+#   Optional:
+#   RESEND_API_KEY for transactional email
+#   GitHub / Google / Slack / Discord keys for those connectors
+#   EXA_API_KEY for web search
 #
 # The app should not boot cleanly without the required values.
 # Web, database tooling, and local scripts all read root .env.
@@ -178,17 +180,24 @@ cp .env.example .env
 # Run database migrations
 pnpm --filter @garden/db db:migrate
 
-# Start the Garden Worker through Turbo's TUI
+# Start Garden locally through Turbo's TUI
 pnpm dev
 ```
 
 Open `http://localhost:3000`.
 
-`pnpm dev` is the normal local workflow:
+`pnpm dev` is the reproducible local workflow:
 
 - Turbo starts `@garden/web` in TUI mode.
 - The web app runs on `localhost:3000`.
-- Garden Worker and Cloudflare remote bindings use values from root `.env`.
+- D1, R2, Durable Objects, and Workflows run in the local Workers simulator.
+- Hyperdrive connects to `DATABASE_URL` from root `.env`.
+
+`pnpm dev:remote` enables Cloudflare remote bindings and Sandbox containers. It
+requires Docker, Wrangler authentication, and ignored
+`apps/web/wrangler.containers.local.jsonc` with real Hyperdrive and D1 resource
+IDs. Copy `apps/web/wrangler.containers.jsonc` to that path before editing it;
+never commit account-specific IDs.
 
 OAuth callbacks are configured for `localhost:3000` in local env and Wrangler config.
 
@@ -196,10 +205,11 @@ OAuth callbacks are configured for `localhost:3000` in local env and Wrangler co
 
 | Command                               | Description                                                        |
 | ------------------------------------- | ------------------------------------------------------------------ |
-| `pnpm dev`                            | Start the web Worker with remote bindings and containers           |
+| `pnpm dev`                            | Start the web Worker with local bindings                           |
 | `pnpm dev:local`                      | Start the web Worker with local bindings                           |
+| `pnpm dev:remote`                     | Start with remote bindings and Sandbox containers                  |
 | `pnpm dev:reset`                      | Stop Garden dev processes started by Turbo/Vite/Wrangler           |
-| `pnpm dev:web`                        | Start only the web app with full bindings                          |
+| `pnpm dev:web`                        | Start only the web app with local bindings                         |
 | `pnpm --filter @garden/web dev:local` | Start only the web app directly on `localhost` with local bindings |
 | `pnpm build`                          | Build all packages                                                 |
 | `pnpm typecheck`                      | Type-check everything                                              |

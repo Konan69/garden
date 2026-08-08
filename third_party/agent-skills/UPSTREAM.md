@@ -1,8 +1,10 @@
 # Bundled agent-skill provenance
 
 Snapshot: 2026-08-07. This inventory covers source copied into
-`.agents/skills`; package-manager dependencies are outside its scope. Source
-coordinates and install-time hashes are also retained in `skills-lock.json`.
+`.agents/skills`; package-manager dependencies are outside its scope.
+`skills-lock.json` records installer-managed bundles. Manually curated bundles
+such as `better-result`, `effect`, and `motion` are recorded here and in their
+bundled source or skill guidance instead.
 
 The files are development instructions, not application runtime code. Local
 changes are licensed with Garden, while upstream portions remain under the

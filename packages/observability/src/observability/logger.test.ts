@@ -66,7 +66,7 @@ describe('createGardenLogger', () => {
   it('redacts secret-looking nested values', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const logger = createGardenLogger({
-      service: 'garden-mcp-proxy',
+      service: 'garden-worker',
       component: 'test',
     })
 
