@@ -10,13 +10,15 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as RoadmapRouteImport } from './routes/roadmap'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as HarnessyRouteImport } from './routes/harnessy'
 import { Route as FeaturesRouteImport } from './routes/features'
+import { Route as ArchitectureRouteImport } from './routes/architecture'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWorkspacesRouteImport } from './routes/api/workspaces'
 import { Route as ApiUploadFileRouteImport } from './routes/api/upload-file'
-import { Route as ApiSkillsRouteImport } from './routes/api/skills'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as ApiIssuesRouteImport } from './routes/api/issues'
@@ -25,14 +27,12 @@ import { Route as ApiDebugStreamRouteImport } from './routes/api/debug-stream'
 import { Route as ApiConnectionsRouteImport } from './routes/api/connections'
 import { Route as ApiAutomationsRouteImport } from './routes/api/automations'
 import { Route as ApiAgentsRouteImport } from './routes/api/agents'
+import { Route as ApiSplatRouteImport } from './routes/api/$'
 import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
 import { Route as AuthenticatedAutomationsIndexRouteImport } from './routes/_authenticated/automations/index'
 import { Route as ApiWorkspacesIdRouteImport } from './routes/api/workspaces/$id'
-import { Route as ApiSkillsSearchRouteImport } from './routes/api/skills/search'
-import { Route as ApiSkillsPreviewRouteImport } from './routes/api/skills/preview'
-import { Route as ApiSkillsImportRouteImport } from './routes/api/skills/import'
-import { Route as ApiSkillsIdRouteImport } from './routes/api/skills/$id'
 import { Route as ApiRunsIdRouteImport } from './routes/api/runs/$id'
+import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiIssuesSearchRouteImport } from './routes/api/issues/search'
 import { Route as ApiIssuesChildProgressRouteImport } from './routes/api/issues/child-progress'
 import { Route as ApiIssuesIdRouteImport } from './routes/api/issues/$id'
@@ -45,6 +45,11 @@ import { Route as ApiInboxArchiveAllRouteImport } from './routes/api/inbox/archi
 import { Route as ApiGithubSetupRouteImport } from './routes/api/github/setup'
 import { Route as ApiGithubInstallRouteImport } from './routes/api/github/install'
 import { Route as ApiGithubCallbackRouteImport } from './routes/api/github/callback'
+import { Route as ApiExecutorRegistryRouteImport } from './routes/api/executor/registry'
+import { Route as ApiExecutorPreviewRouteImport } from './routes/api/executor/preview'
+import { Route as ApiExecutorInstallRouteImport } from './routes/api/executor/install'
+import { Route as ApiDiscordSetupRouteImport } from './routes/api/discord/setup'
+import { Route as ApiDiscordInstallRouteImport } from './routes/api/discord/install'
 import { Route as ApiDevIssueRunPlanRouteImport } from './routes/api/dev/issue-run-plan'
 import { Route as ApiConnectionsCallbackEventsRouteImport } from './routes/api/connections/callback-events'
 import { Route as ApiConnectionsConnectorIdRouteImport } from './routes/api/connections/$connectorId'
@@ -75,8 +80,8 @@ import { Route as ApiIssuesIdCancelRouteImport } from './routes/api/issues/$id/c
 import { Route as ApiIssuesIdActiveRunRouteImport } from './routes/api/issues/$id/active-run'
 import { Route as ApiInboxIdReadRouteImport } from './routes/api/inbox/$id/read'
 import { Route as ApiInboxIdArchiveRouteImport } from './routes/api/inbox/$id/archive'
+import { Route as ApiExecutorOauthStartRouteImport } from './routes/api/executor/oauth/start'
 import { Route as ApiDocumentsIdVersionsRouteImport } from './routes/api/documents/$id/versions'
-import { Route as ApiDocumentsIdTrackedChangeIdsRouteImport } from './routes/api/documents/$id/tracked-change-ids'
 import { Route as ApiDocumentsIdMetadataRouteImport } from './routes/api/documents/$id/metadata'
 import { Route as ApiDocumentsIdDocxRouteImport } from './routes/api/documents/$id/docx'
 import { Route as ApiDocumentsIdDisplayRouteImport } from './routes/api/documents/$id/display'
@@ -86,7 +91,6 @@ import { Route as ApiChatThreadsIdRouteImport } from './routes/api/chat/threads/
 import { Route as ApiAutomationsIdTriggersRouteImport } from './routes/api/automations/$id/triggers'
 import { Route as ApiAutomationsIdTriggerRouteImport } from './routes/api/automations/$id/trigger'
 import { Route as ApiAutomationsIdRunsRouteImport } from './routes/api/automations/$id/runs'
-import { Route as ApiAgentsIdSkillsRouteImport } from './routes/api/agents/$id/skills'
 import { Route as ApiAgentsIdRestoreRouteImport } from './routes/api/agents/$id/restore'
 import { Route as ApiAgentsIdArchiveRouteImport } from './routes/api/agents/$id/archive'
 import { Route as ApiWorkspacesIdMembersMemberIdRouteImport } from './routes/api/workspaces/$id/members/$memberId'
@@ -97,7 +101,6 @@ import { Route as ApiChatThreadsIdPrimaryIssueRouteImport } from './routes/api/c
 import { Route as ApiChatThreadsIdPermissionRequestsRouteImport } from './routes/api/chat/threads/$id/permission-requests'
 import { Route as ApiChatThreadsIdDocumentsRouteImport } from './routes/api/chat/threads/$id/documents'
 import { Route as ApiAutomationsIdTriggersTriggerIdRouteImport } from './routes/api/automations/$id/triggers/$triggerId'
-import { Route as ApiDocumentsDocumentIdEditsEditIdActionRouteImport } from './routes/api/documents/$documentId/edits/$editId/$action'
 import { Route as ApiConnectionsConnectorIdToolsNameGrantRouteImport } from './routes/api/connections/$connectorId/tools/$name/grant'
 
 const SignupRoute = SignupRouteImport.update({
@@ -105,14 +108,29 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoadmapRoute = RoadmapRouteImport.update({
+  id: '/roadmap',
+  path: '/roadmap',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HarnessyRoute = HarnessyRouteImport.update({
+  id: '/harnessy',
+  path: '/harnessy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FeaturesRoute = FeaturesRouteImport.update({
   id: '/features',
   path: '/features',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArchitectureRoute = ArchitectureRouteImport.update({
+  id: '/architecture',
+  path: '/architecture',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -132,11 +150,6 @@ const ApiWorkspacesRoute = ApiWorkspacesRouteImport.update({
 const ApiUploadFileRoute = ApiUploadFileRouteImport.update({
   id: '/api/upload-file',
   path: '/api/upload-file',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSkillsRoute = ApiSkillsRouteImport.update({
-  id: '/api/skills',
-  path: '/api/skills',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProjectsRoute = ApiProjectsRouteImport.update({
@@ -179,6 +192,11 @@ const ApiAgentsRoute = ApiAgentsRouteImport.update({
   path: '/api/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSplatRoute = ApiSplatRouteImport.update({
+  id: '/api/$',
+  path: '/api/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
   id: '/workspace',
   path: '/workspace',
@@ -195,29 +213,14 @@ const ApiWorkspacesIdRoute = ApiWorkspacesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiWorkspacesRoute,
 } as any)
-const ApiSkillsSearchRoute = ApiSkillsSearchRouteImport.update({
-  id: '/search',
-  path: '/search',
-  getParentRoute: () => ApiSkillsRoute,
-} as any)
-const ApiSkillsPreviewRoute = ApiSkillsPreviewRouteImport.update({
-  id: '/preview',
-  path: '/preview',
-  getParentRoute: () => ApiSkillsRoute,
-} as any)
-const ApiSkillsImportRoute = ApiSkillsImportRouteImport.update({
-  id: '/import',
-  path: '/import',
-  getParentRoute: () => ApiSkillsRoute,
-} as any)
-const ApiSkillsIdRoute = ApiSkillsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ApiSkillsRoute,
-} as any)
 const ApiRunsIdRoute = ApiRunsIdRouteImport.update({
   id: '/api/runs/$id',
   path: '/api/runs/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOauthCallbackRoute = ApiOauthCallbackRouteImport.update({
+  id: '/api/oauth/callback',
+  path: '/api/oauth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiIssuesSearchRoute = ApiIssuesSearchRouteImport.update({
@@ -280,6 +283,31 @@ const ApiGithubInstallRoute = ApiGithubInstallRouteImport.update({
 const ApiGithubCallbackRoute = ApiGithubCallbackRouteImport.update({
   id: '/api/github/callback',
   path: '/api/github/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExecutorRegistryRoute = ApiExecutorRegistryRouteImport.update({
+  id: '/api/executor/registry',
+  path: '/api/executor/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExecutorPreviewRoute = ApiExecutorPreviewRouteImport.update({
+  id: '/api/executor/preview',
+  path: '/api/executor/preview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExecutorInstallRoute = ApiExecutorInstallRouteImport.update({
+  id: '/api/executor/install',
+  path: '/api/executor/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDiscordSetupRoute = ApiDiscordSetupRouteImport.update({
+  id: '/api/discord/setup',
+  path: '/api/discord/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDiscordInstallRoute = ApiDiscordInstallRouteImport.update({
+  id: '/api/discord/install',
+  path: '/api/discord/install',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDevIssueRunPlanRoute = ApiDevIssueRunPlanRouteImport.update({
@@ -439,17 +467,16 @@ const ApiInboxIdArchiveRoute = ApiInboxIdArchiveRouteImport.update({
   path: '/$id/archive',
   getParentRoute: () => ApiInboxRoute,
 } as any)
+const ApiExecutorOauthStartRoute = ApiExecutorOauthStartRouteImport.update({
+  id: '/api/executor/oauth/start',
+  path: '/api/executor/oauth/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDocumentsIdVersionsRoute = ApiDocumentsIdVersionsRouteImport.update({
   id: '/api/documents/$id/versions',
   path: '/api/documents/$id/versions',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiDocumentsIdTrackedChangeIdsRoute =
-  ApiDocumentsIdTrackedChangeIdsRouteImport.update({
-    id: '/api/documents/$id/tracked-change-ids',
-    path: '/api/documents/$id/tracked-change-ids',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiDocumentsIdMetadataRoute = ApiDocumentsIdMetadataRouteImport.update({
   id: '/api/documents/$id/metadata',
   path: '/api/documents/$id/metadata',
@@ -496,11 +523,6 @@ const ApiAutomationsIdRunsRoute = ApiAutomationsIdRunsRouteImport.update({
   id: '/runs',
   path: '/runs',
   getParentRoute: () => ApiAutomationsIdRoute,
-} as any)
-const ApiAgentsIdSkillsRoute = ApiAgentsIdSkillsRouteImport.update({
-  id: '/skills',
-  path: '/skills',
-  getParentRoute: () => ApiAgentsIdRoute,
 } as any)
 const ApiAgentsIdRestoreRoute = ApiAgentsIdRestoreRouteImport.update({
   id: '/restore',
@@ -560,12 +582,6 @@ const ApiAutomationsIdTriggersTriggerIdRoute =
     path: '/$triggerId',
     getParentRoute: () => ApiAutomationsIdTriggersRoute,
   } as any)
-const ApiDocumentsDocumentIdEditsEditIdActionRoute =
-  ApiDocumentsDocumentIdEditsEditIdActionRouteImport.update({
-    id: '/api/documents/$documentId/edits/$editId/$action',
-    path: '/api/documents/$documentId/edits/$editId/$action',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiConnectionsConnectorIdToolsNameGrantRoute =
   ApiConnectionsConnectorIdToolsNameGrantRouteImport.update({
     id: '/tools/$name/grant',
@@ -575,10 +591,14 @@ const ApiConnectionsConnectorIdToolsNameGrantRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/architecture': typeof ArchitectureRoute
   '/features': typeof FeaturesRoute
+  '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
+  '/api/$': typeof ApiSplatRoute
   '/api/agents': typeof ApiAgentsRouteWithChildren
   '/api/automations': typeof ApiAutomationsRouteWithChildren
   '/api/connections': typeof ApiConnectionsRouteWithChildren
@@ -587,7 +607,6 @@ export interface FileRoutesByFullPath {
   '/api/issues': typeof ApiIssuesRouteWithChildren
   '/api/me': typeof ApiMeRoute
   '/api/projects': typeof ApiProjectsRoute
-  '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/upload-file': typeof ApiUploadFileRoute
   '/api/workspaces': typeof ApiWorkspacesRouteWithChildren
   '/automations/$id': typeof AuthenticatedAutomationsIdRoute
@@ -601,6 +620,11 @@ export interface FileRoutesByFullPath {
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
   '/api/connections/callback-events': typeof ApiConnectionsCallbackEventsRoute
   '/api/dev/issue-run-plan': typeof ApiDevIssueRunPlanRoute
+  '/api/discord/install': typeof ApiDiscordInstallRoute
+  '/api/discord/setup': typeof ApiDiscordSetupRoute
+  '/api/executor/install': typeof ApiExecutorInstallRoute
+  '/api/executor/preview': typeof ApiExecutorPreviewRoute
+  '/api/executor/registry': typeof ApiExecutorRegistryRoute
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/setup': typeof ApiGithubSetupRoute
@@ -613,16 +637,12 @@ export interface FileRoutesByFullPath {
   '/api/issues/$id': typeof ApiIssuesIdRouteWithChildren
   '/api/issues/child-progress': typeof ApiIssuesChildProgressRoute
   '/api/issues/search': typeof ApiIssuesSearchRoute
+  '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/runs/$id': typeof ApiRunsIdRoute
-  '/api/skills/$id': typeof ApiSkillsIdRoute
-  '/api/skills/import': typeof ApiSkillsImportRoute
-  '/api/skills/preview': typeof ApiSkillsPreviewRoute
-  '/api/skills/search': typeof ApiSkillsSearchRoute
   '/api/workspaces/$id': typeof ApiWorkspacesIdRouteWithChildren
   '/automations/': typeof AuthenticatedAutomationsIndexRoute
   '/api/agents/$id/archive': typeof ApiAgentsIdArchiveRoute
   '/api/agents/$id/restore': typeof ApiAgentsIdRestoreRoute
-  '/api/agents/$id/skills': typeof ApiAgentsIdSkillsRoute
   '/api/automations/$id/runs': typeof ApiAutomationsIdRunsRoute
   '/api/automations/$id/trigger': typeof ApiAutomationsIdTriggerRoute
   '/api/automations/$id/triggers': typeof ApiAutomationsIdTriggersRouteWithChildren
@@ -632,8 +652,8 @@ export interface FileRoutesByFullPath {
   '/api/documents/$id/display': typeof ApiDocumentsIdDisplayRoute
   '/api/documents/$id/docx': typeof ApiDocumentsIdDocxRoute
   '/api/documents/$id/metadata': typeof ApiDocumentsIdMetadataRoute
-  '/api/documents/$id/tracked-change-ids': typeof ApiDocumentsIdTrackedChangeIdsRoute
   '/api/documents/$id/versions': typeof ApiDocumentsIdVersionsRoute
+  '/api/executor/oauth/start': typeof ApiExecutorOauthStartRoute
   '/api/inbox/$id/archive': typeof ApiInboxIdArchiveRoute
   '/api/inbox/$id/read': typeof ApiInboxIdReadRoute
   '/api/issues/$id/active-run': typeof ApiIssuesIdActiveRunRoute
@@ -662,14 +682,17 @@ export interface FileRoutesByFullPath {
   '/api/workspaces/$id/invitations/$invitationId': typeof ApiWorkspacesIdInvitationsInvitationIdRoute
   '/api/workspaces/$id/members/$memberId': typeof ApiWorkspacesIdMembersMemberIdRoute
   '/api/connections/$connectorId/tools/$name/grant': typeof ApiConnectionsConnectorIdToolsNameGrantRoute
-  '/api/documents/$documentId/edits/$editId/$action': typeof ApiDocumentsDocumentIdEditsEditIdActionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/architecture': typeof ArchitectureRoute
   '/features': typeof FeaturesRoute
+  '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
+  '/api/$': typeof ApiSplatRoute
   '/api/agents': typeof ApiAgentsRouteWithChildren
   '/api/automations': typeof ApiAutomationsRouteWithChildren
   '/api/connections': typeof ApiConnectionsRouteWithChildren
@@ -678,7 +701,6 @@ export interface FileRoutesByTo {
   '/api/issues': typeof ApiIssuesRouteWithChildren
   '/api/me': typeof ApiMeRoute
   '/api/projects': typeof ApiProjectsRoute
-  '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/upload-file': typeof ApiUploadFileRoute
   '/api/workspaces': typeof ApiWorkspacesRouteWithChildren
   '/automations/$id': typeof AuthenticatedAutomationsIdRoute
@@ -692,6 +714,11 @@ export interface FileRoutesByTo {
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
   '/api/connections/callback-events': typeof ApiConnectionsCallbackEventsRoute
   '/api/dev/issue-run-plan': typeof ApiDevIssueRunPlanRoute
+  '/api/discord/install': typeof ApiDiscordInstallRoute
+  '/api/discord/setup': typeof ApiDiscordSetupRoute
+  '/api/executor/install': typeof ApiExecutorInstallRoute
+  '/api/executor/preview': typeof ApiExecutorPreviewRoute
+  '/api/executor/registry': typeof ApiExecutorRegistryRoute
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/setup': typeof ApiGithubSetupRoute
@@ -704,16 +731,12 @@ export interface FileRoutesByTo {
   '/api/issues/$id': typeof ApiIssuesIdRouteWithChildren
   '/api/issues/child-progress': typeof ApiIssuesChildProgressRoute
   '/api/issues/search': typeof ApiIssuesSearchRoute
+  '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/runs/$id': typeof ApiRunsIdRoute
-  '/api/skills/$id': typeof ApiSkillsIdRoute
-  '/api/skills/import': typeof ApiSkillsImportRoute
-  '/api/skills/preview': typeof ApiSkillsPreviewRoute
-  '/api/skills/search': typeof ApiSkillsSearchRoute
   '/api/workspaces/$id': typeof ApiWorkspacesIdRouteWithChildren
   '/automations': typeof AuthenticatedAutomationsIndexRoute
   '/api/agents/$id/archive': typeof ApiAgentsIdArchiveRoute
   '/api/agents/$id/restore': typeof ApiAgentsIdRestoreRoute
-  '/api/agents/$id/skills': typeof ApiAgentsIdSkillsRoute
   '/api/automations/$id/runs': typeof ApiAutomationsIdRunsRoute
   '/api/automations/$id/trigger': typeof ApiAutomationsIdTriggerRoute
   '/api/automations/$id/triggers': typeof ApiAutomationsIdTriggersRouteWithChildren
@@ -723,8 +746,8 @@ export interface FileRoutesByTo {
   '/api/documents/$id/display': typeof ApiDocumentsIdDisplayRoute
   '/api/documents/$id/docx': typeof ApiDocumentsIdDocxRoute
   '/api/documents/$id/metadata': typeof ApiDocumentsIdMetadataRoute
-  '/api/documents/$id/tracked-change-ids': typeof ApiDocumentsIdTrackedChangeIdsRoute
   '/api/documents/$id/versions': typeof ApiDocumentsIdVersionsRoute
+  '/api/executor/oauth/start': typeof ApiExecutorOauthStartRoute
   '/api/inbox/$id/archive': typeof ApiInboxIdArchiveRoute
   '/api/inbox/$id/read': typeof ApiInboxIdReadRoute
   '/api/issues/$id/active-run': typeof ApiIssuesIdActiveRunRoute
@@ -753,16 +776,19 @@ export interface FileRoutesByTo {
   '/api/workspaces/$id/invitations/$invitationId': typeof ApiWorkspacesIdInvitationsInvitationIdRoute
   '/api/workspaces/$id/members/$memberId': typeof ApiWorkspacesIdMembersMemberIdRoute
   '/api/connections/$connectorId/tools/$name/grant': typeof ApiConnectionsConnectorIdToolsNameGrantRoute
-  '/api/documents/$documentId/edits/$editId/$action': typeof ApiDocumentsDocumentIdEditsEditIdActionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/architecture': typeof ArchitectureRoute
   '/features': typeof FeaturesRoute
+  '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
+  '/api/$': typeof ApiSplatRoute
   '/api/agents': typeof ApiAgentsRouteWithChildren
   '/api/automations': typeof ApiAutomationsRouteWithChildren
   '/api/connections': typeof ApiConnectionsRouteWithChildren
@@ -771,7 +797,6 @@ export interface FileRoutesById {
   '/api/issues': typeof ApiIssuesRouteWithChildren
   '/api/me': typeof ApiMeRoute
   '/api/projects': typeof ApiProjectsRoute
-  '/api/skills': typeof ApiSkillsRouteWithChildren
   '/api/upload-file': typeof ApiUploadFileRoute
   '/api/workspaces': typeof ApiWorkspacesRouteWithChildren
   '/_authenticated/automations/$id': typeof AuthenticatedAutomationsIdRoute
@@ -785,6 +810,11 @@ export interface FileRoutesById {
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
   '/api/connections/callback-events': typeof ApiConnectionsCallbackEventsRoute
   '/api/dev/issue-run-plan': typeof ApiDevIssueRunPlanRoute
+  '/api/discord/install': typeof ApiDiscordInstallRoute
+  '/api/discord/setup': typeof ApiDiscordSetupRoute
+  '/api/executor/install': typeof ApiExecutorInstallRoute
+  '/api/executor/preview': typeof ApiExecutorPreviewRoute
+  '/api/executor/registry': typeof ApiExecutorRegistryRoute
   '/api/github/callback': typeof ApiGithubCallbackRoute
   '/api/github/install': typeof ApiGithubInstallRoute
   '/api/github/setup': typeof ApiGithubSetupRoute
@@ -797,16 +827,12 @@ export interface FileRoutesById {
   '/api/issues/$id': typeof ApiIssuesIdRouteWithChildren
   '/api/issues/child-progress': typeof ApiIssuesChildProgressRoute
   '/api/issues/search': typeof ApiIssuesSearchRoute
+  '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/runs/$id': typeof ApiRunsIdRoute
-  '/api/skills/$id': typeof ApiSkillsIdRoute
-  '/api/skills/import': typeof ApiSkillsImportRoute
-  '/api/skills/preview': typeof ApiSkillsPreviewRoute
-  '/api/skills/search': typeof ApiSkillsSearchRoute
   '/api/workspaces/$id': typeof ApiWorkspacesIdRouteWithChildren
   '/_authenticated/automations/': typeof AuthenticatedAutomationsIndexRoute
   '/api/agents/$id/archive': typeof ApiAgentsIdArchiveRoute
   '/api/agents/$id/restore': typeof ApiAgentsIdRestoreRoute
-  '/api/agents/$id/skills': typeof ApiAgentsIdSkillsRoute
   '/api/automations/$id/runs': typeof ApiAutomationsIdRunsRoute
   '/api/automations/$id/trigger': typeof ApiAutomationsIdTriggerRoute
   '/api/automations/$id/triggers': typeof ApiAutomationsIdTriggersRouteWithChildren
@@ -816,8 +842,8 @@ export interface FileRoutesById {
   '/api/documents/$id/display': typeof ApiDocumentsIdDisplayRoute
   '/api/documents/$id/docx': typeof ApiDocumentsIdDocxRoute
   '/api/documents/$id/metadata': typeof ApiDocumentsIdMetadataRoute
-  '/api/documents/$id/tracked-change-ids': typeof ApiDocumentsIdTrackedChangeIdsRoute
   '/api/documents/$id/versions': typeof ApiDocumentsIdVersionsRoute
+  '/api/executor/oauth/start': typeof ApiExecutorOauthStartRoute
   '/api/inbox/$id/archive': typeof ApiInboxIdArchiveRoute
   '/api/inbox/$id/read': typeof ApiInboxIdReadRoute
   '/api/issues/$id/active-run': typeof ApiIssuesIdActiveRunRoute
@@ -846,16 +872,19 @@ export interface FileRoutesById {
   '/api/workspaces/$id/invitations/$invitationId': typeof ApiWorkspacesIdInvitationsInvitationIdRoute
   '/api/workspaces/$id/members/$memberId': typeof ApiWorkspacesIdMembersMemberIdRoute
   '/api/connections/$connectorId/tools/$name/grant': typeof ApiConnectionsConnectorIdToolsNameGrantRoute
-  '/api/documents/$documentId/edits/$editId/$action': typeof ApiDocumentsDocumentIdEditsEditIdActionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/architecture'
     | '/features'
+    | '/harnessy'
     | '/login'
+    | '/roadmap'
     | '/signup'
     | '/workspace'
+    | '/api/$'
     | '/api/agents'
     | '/api/automations'
     | '/api/connections'
@@ -864,7 +893,6 @@ export interface FileRouteTypes {
     | '/api/issues'
     | '/api/me'
     | '/api/projects'
-    | '/api/skills'
     | '/api/upload-file'
     | '/api/workspaces'
     | '/automations/$id'
@@ -878,6 +906,11 @@ export interface FileRouteTypes {
     | '/api/connections/$connectorId'
     | '/api/connections/callback-events'
     | '/api/dev/issue-run-plan'
+    | '/api/discord/install'
+    | '/api/discord/setup'
+    | '/api/executor/install'
+    | '/api/executor/preview'
+    | '/api/executor/registry'
     | '/api/github/callback'
     | '/api/github/install'
     | '/api/github/setup'
@@ -890,16 +923,12 @@ export interface FileRouteTypes {
     | '/api/issues/$id'
     | '/api/issues/child-progress'
     | '/api/issues/search'
+    | '/api/oauth/callback'
     | '/api/runs/$id'
-    | '/api/skills/$id'
-    | '/api/skills/import'
-    | '/api/skills/preview'
-    | '/api/skills/search'
     | '/api/workspaces/$id'
     | '/automations/'
     | '/api/agents/$id/archive'
     | '/api/agents/$id/restore'
-    | '/api/agents/$id/skills'
     | '/api/automations/$id/runs'
     | '/api/automations/$id/trigger'
     | '/api/automations/$id/triggers'
@@ -909,8 +938,8 @@ export interface FileRouteTypes {
     | '/api/documents/$id/display'
     | '/api/documents/$id/docx'
     | '/api/documents/$id/metadata'
-    | '/api/documents/$id/tracked-change-ids'
     | '/api/documents/$id/versions'
+    | '/api/executor/oauth/start'
     | '/api/inbox/$id/archive'
     | '/api/inbox/$id/read'
     | '/api/issues/$id/active-run'
@@ -939,14 +968,17 @@ export interface FileRouteTypes {
     | '/api/workspaces/$id/invitations/$invitationId'
     | '/api/workspaces/$id/members/$memberId'
     | '/api/connections/$connectorId/tools/$name/grant'
-    | '/api/documents/$documentId/edits/$editId/$action'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/architecture'
     | '/features'
+    | '/harnessy'
     | '/login'
+    | '/roadmap'
     | '/signup'
     | '/workspace'
+    | '/api/$'
     | '/api/agents'
     | '/api/automations'
     | '/api/connections'
@@ -955,7 +987,6 @@ export interface FileRouteTypes {
     | '/api/issues'
     | '/api/me'
     | '/api/projects'
-    | '/api/skills'
     | '/api/upload-file'
     | '/api/workspaces'
     | '/automations/$id'
@@ -969,6 +1000,11 @@ export interface FileRouteTypes {
     | '/api/connections/$connectorId'
     | '/api/connections/callback-events'
     | '/api/dev/issue-run-plan'
+    | '/api/discord/install'
+    | '/api/discord/setup'
+    | '/api/executor/install'
+    | '/api/executor/preview'
+    | '/api/executor/registry'
     | '/api/github/callback'
     | '/api/github/install'
     | '/api/github/setup'
@@ -981,16 +1017,12 @@ export interface FileRouteTypes {
     | '/api/issues/$id'
     | '/api/issues/child-progress'
     | '/api/issues/search'
+    | '/api/oauth/callback'
     | '/api/runs/$id'
-    | '/api/skills/$id'
-    | '/api/skills/import'
-    | '/api/skills/preview'
-    | '/api/skills/search'
     | '/api/workspaces/$id'
     | '/automations'
     | '/api/agents/$id/archive'
     | '/api/agents/$id/restore'
-    | '/api/agents/$id/skills'
     | '/api/automations/$id/runs'
     | '/api/automations/$id/trigger'
     | '/api/automations/$id/triggers'
@@ -1000,8 +1032,8 @@ export interface FileRouteTypes {
     | '/api/documents/$id/display'
     | '/api/documents/$id/docx'
     | '/api/documents/$id/metadata'
-    | '/api/documents/$id/tracked-change-ids'
     | '/api/documents/$id/versions'
+    | '/api/executor/oauth/start'
     | '/api/inbox/$id/archive'
     | '/api/inbox/$id/read'
     | '/api/issues/$id/active-run'
@@ -1030,15 +1062,18 @@ export interface FileRouteTypes {
     | '/api/workspaces/$id/invitations/$invitationId'
     | '/api/workspaces/$id/members/$memberId'
     | '/api/connections/$connectorId/tools/$name/grant'
-    | '/api/documents/$documentId/edits/$editId/$action'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/architecture'
     | '/features'
+    | '/harnessy'
     | '/login'
+    | '/roadmap'
     | '/signup'
     | '/_authenticated/workspace'
+    | '/api/$'
     | '/api/agents'
     | '/api/automations'
     | '/api/connections'
@@ -1047,7 +1082,6 @@ export interface FileRouteTypes {
     | '/api/issues'
     | '/api/me'
     | '/api/projects'
-    | '/api/skills'
     | '/api/upload-file'
     | '/api/workspaces'
     | '/_authenticated/automations/$id'
@@ -1061,6 +1095,11 @@ export interface FileRouteTypes {
     | '/api/connections/$connectorId'
     | '/api/connections/callback-events'
     | '/api/dev/issue-run-plan'
+    | '/api/discord/install'
+    | '/api/discord/setup'
+    | '/api/executor/install'
+    | '/api/executor/preview'
+    | '/api/executor/registry'
     | '/api/github/callback'
     | '/api/github/install'
     | '/api/github/setup'
@@ -1073,16 +1112,12 @@ export interface FileRouteTypes {
     | '/api/issues/$id'
     | '/api/issues/child-progress'
     | '/api/issues/search'
+    | '/api/oauth/callback'
     | '/api/runs/$id'
-    | '/api/skills/$id'
-    | '/api/skills/import'
-    | '/api/skills/preview'
-    | '/api/skills/search'
     | '/api/workspaces/$id'
     | '/_authenticated/automations/'
     | '/api/agents/$id/archive'
     | '/api/agents/$id/restore'
-    | '/api/agents/$id/skills'
     | '/api/automations/$id/runs'
     | '/api/automations/$id/trigger'
     | '/api/automations/$id/triggers'
@@ -1092,8 +1127,8 @@ export interface FileRouteTypes {
     | '/api/documents/$id/display'
     | '/api/documents/$id/docx'
     | '/api/documents/$id/metadata'
-    | '/api/documents/$id/tracked-change-ids'
     | '/api/documents/$id/versions'
+    | '/api/executor/oauth/start'
     | '/api/inbox/$id/archive'
     | '/api/inbox/$id/read'
     | '/api/issues/$id/active-run'
@@ -1122,15 +1157,18 @@ export interface FileRouteTypes {
     | '/api/workspaces/$id/invitations/$invitationId'
     | '/api/workspaces/$id/members/$memberId'
     | '/api/connections/$connectorId/tools/$name/grant'
-    | '/api/documents/$documentId/edits/$editId/$action'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  ArchitectureRoute: typeof ArchitectureRoute
   FeaturesRoute: typeof FeaturesRoute
+  HarnessyRoute: typeof HarnessyRoute
   LoginRoute: typeof LoginRoute
+  RoadmapRoute: typeof RoadmapRoute
   SignupRoute: typeof SignupRoute
+  ApiSplatRoute: typeof ApiSplatRoute
   ApiAgentsRoute: typeof ApiAgentsRouteWithChildren
   ApiAutomationsRoute: typeof ApiAutomationsRouteWithChildren
   ApiConnectionsRoute: typeof ApiConnectionsRouteWithChildren
@@ -1139,7 +1177,6 @@ export interface RootRouteChildren {
   ApiIssuesRoute: typeof ApiIssuesRouteWithChildren
   ApiMeRoute: typeof ApiMeRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
-  ApiSkillsRoute: typeof ApiSkillsRouteWithChildren
   ApiUploadFileRoute: typeof ApiUploadFileRoute
   ApiWorkspacesRoute: typeof ApiWorkspacesRouteWithChildren
   ApiAttachmentsIdRoute: typeof ApiAttachmentsIdRoute
@@ -1147,19 +1184,24 @@ export interface RootRouteChildren {
   ApiChatThreadsRoute: typeof ApiChatThreadsRouteWithChildren
   ApiCommentsIdRoute: typeof ApiCommentsIdRouteWithChildren
   ApiDevIssueRunPlanRoute: typeof ApiDevIssueRunPlanRoute
+  ApiDiscordInstallRoute: typeof ApiDiscordInstallRoute
+  ApiDiscordSetupRoute: typeof ApiDiscordSetupRoute
+  ApiExecutorInstallRoute: typeof ApiExecutorInstallRoute
+  ApiExecutorPreviewRoute: typeof ApiExecutorPreviewRoute
+  ApiExecutorRegistryRoute: typeof ApiExecutorRegistryRoute
   ApiGithubCallbackRoute: typeof ApiGithubCallbackRoute
   ApiGithubInstallRoute: typeof ApiGithubInstallRoute
   ApiGithubSetupRoute: typeof ApiGithubSetupRoute
   ApiInternalCapabilitySyncRoute: typeof ApiInternalCapabilitySyncRoute
+  ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiRunsIdRoute: typeof ApiRunsIdRoute
   ApiDocumentsIdDisplayRoute: typeof ApiDocumentsIdDisplayRoute
   ApiDocumentsIdDocxRoute: typeof ApiDocumentsIdDocxRoute
   ApiDocumentsIdMetadataRoute: typeof ApiDocumentsIdMetadataRoute
-  ApiDocumentsIdTrackedChangeIdsRoute: typeof ApiDocumentsIdTrackedChangeIdsRoute
   ApiDocumentsIdVersionsRoute: typeof ApiDocumentsIdVersionsRoute
+  ApiExecutorOauthStartRoute: typeof ApiExecutorOauthStartRoute
   ApiPermissionRequestsIdResolveRoute: typeof ApiPermissionRequestsIdResolveRoute
   ApiWorkProductsIdReviewRoute: typeof ApiWorkProductsIdReviewRoute
-  ApiDocumentsDocumentIdEditsEditIdActionRoute: typeof ApiDocumentsDocumentIdEditsEditIdActionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1171,6 +1213,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/roadmap': {
+      id: '/roadmap'
+      path: '/roadmap'
+      fullPath: '/roadmap'
+      preLoaderRoute: typeof RoadmapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -1178,11 +1227,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/harnessy': {
+      id: '/harnessy'
+      path: '/harnessy'
+      fullPath: '/harnessy'
+      preLoaderRoute: typeof HarnessyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/features': {
       id: '/features'
       path: '/features'
       fullPath: '/features'
       preLoaderRoute: typeof FeaturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/architecture': {
+      id: '/architecture'
+      path: '/architecture'
+      fullPath: '/architecture'
+      preLoaderRoute: typeof ArchitectureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -1211,13 +1274,6 @@ declare module '@tanstack/react-router' {
       path: '/api/upload-file'
       fullPath: '/api/upload-file'
       preLoaderRoute: typeof ApiUploadFileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/skills': {
-      id: '/api/skills'
-      path: '/api/skills'
-      fullPath: '/api/skills'
-      preLoaderRoute: typeof ApiSkillsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/projects': {
@@ -1276,6 +1332,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/$': {
+      id: '/api/$'
+      path: '/api/$'
+      fullPath: '/api/$'
+      preLoaderRoute: typeof ApiSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/workspace': {
       id: '/_authenticated/workspace'
       path: '/workspace'
@@ -1297,39 +1360,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWorkspacesIdRouteImport
       parentRoute: typeof ApiWorkspacesRoute
     }
-    '/api/skills/search': {
-      id: '/api/skills/search'
-      path: '/search'
-      fullPath: '/api/skills/search'
-      preLoaderRoute: typeof ApiSkillsSearchRouteImport
-      parentRoute: typeof ApiSkillsRoute
-    }
-    '/api/skills/preview': {
-      id: '/api/skills/preview'
-      path: '/preview'
-      fullPath: '/api/skills/preview'
-      preLoaderRoute: typeof ApiSkillsPreviewRouteImport
-      parentRoute: typeof ApiSkillsRoute
-    }
-    '/api/skills/import': {
-      id: '/api/skills/import'
-      path: '/import'
-      fullPath: '/api/skills/import'
-      preLoaderRoute: typeof ApiSkillsImportRouteImport
-      parentRoute: typeof ApiSkillsRoute
-    }
-    '/api/skills/$id': {
-      id: '/api/skills/$id'
-      path: '/$id'
-      fullPath: '/api/skills/$id'
-      preLoaderRoute: typeof ApiSkillsIdRouteImport
-      parentRoute: typeof ApiSkillsRoute
-    }
     '/api/runs/$id': {
       id: '/api/runs/$id'
       path: '/api/runs/$id'
       fullPath: '/api/runs/$id'
       preLoaderRoute: typeof ApiRunsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/oauth/callback': {
+      id: '/api/oauth/callback'
+      path: '/api/oauth/callback'
+      fullPath: '/api/oauth/callback'
+      preLoaderRoute: typeof ApiOauthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/issues/search': {
@@ -1414,6 +1456,41 @@ declare module '@tanstack/react-router' {
       path: '/api/github/callback'
       fullPath: '/api/github/callback'
       preLoaderRoute: typeof ApiGithubCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/executor/registry': {
+      id: '/api/executor/registry'
+      path: '/api/executor/registry'
+      fullPath: '/api/executor/registry'
+      preLoaderRoute: typeof ApiExecutorRegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/executor/preview': {
+      id: '/api/executor/preview'
+      path: '/api/executor/preview'
+      fullPath: '/api/executor/preview'
+      preLoaderRoute: typeof ApiExecutorPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/executor/install': {
+      id: '/api/executor/install'
+      path: '/api/executor/install'
+      fullPath: '/api/executor/install'
+      preLoaderRoute: typeof ApiExecutorInstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discord/setup': {
+      id: '/api/discord/setup'
+      path: '/api/discord/setup'
+      fullPath: '/api/discord/setup'
+      preLoaderRoute: typeof ApiDiscordSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discord/install': {
+      id: '/api/discord/install'
+      path: '/api/discord/install'
+      fullPath: '/api/discord/install'
+      preLoaderRoute: typeof ApiDiscordInstallRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/dev/issue-run-plan': {
@@ -1626,18 +1703,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInboxIdArchiveRouteImport
       parentRoute: typeof ApiInboxRoute
     }
+    '/api/executor/oauth/start': {
+      id: '/api/executor/oauth/start'
+      path: '/api/executor/oauth/start'
+      fullPath: '/api/executor/oauth/start'
+      preLoaderRoute: typeof ApiExecutorOauthStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/documents/$id/versions': {
       id: '/api/documents/$id/versions'
       path: '/api/documents/$id/versions'
       fullPath: '/api/documents/$id/versions'
       preLoaderRoute: typeof ApiDocumentsIdVersionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/documents/$id/tracked-change-ids': {
-      id: '/api/documents/$id/tracked-change-ids'
-      path: '/api/documents/$id/tracked-change-ids'
-      fullPath: '/api/documents/$id/tracked-change-ids'
-      preLoaderRoute: typeof ApiDocumentsIdTrackedChangeIdsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/documents/$id/metadata': {
@@ -1702,13 +1779,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/automations/$id/runs'
       preLoaderRoute: typeof ApiAutomationsIdRunsRouteImport
       parentRoute: typeof ApiAutomationsIdRoute
-    }
-    '/api/agents/$id/skills': {
-      id: '/api/agents/$id/skills'
-      path: '/skills'
-      fullPath: '/api/agents/$id/skills'
-      preLoaderRoute: typeof ApiAgentsIdSkillsRouteImport
-      parentRoute: typeof ApiAgentsIdRoute
     }
     '/api/agents/$id/restore': {
       id: '/api/agents/$id/restore'
@@ -1780,13 +1850,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAutomationsIdTriggersTriggerIdRouteImport
       parentRoute: typeof ApiAutomationsIdTriggersRoute
     }
-    '/api/documents/$documentId/edits/$editId/$action': {
-      id: '/api/documents/$documentId/edits/$editId/$action'
-      path: '/api/documents/$documentId/edits/$editId/$action'
-      fullPath: '/api/documents/$documentId/edits/$editId/$action'
-      preLoaderRoute: typeof ApiDocumentsDocumentIdEditsEditIdActionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/connections/$connectorId/tools/$name/grant': {
       id: '/api/connections/$connectorId/tools/$name/grant'
       path: '/tools/$name/grant'
@@ -1818,13 +1881,11 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 interface ApiAgentsIdRouteChildren {
   ApiAgentsIdArchiveRoute: typeof ApiAgentsIdArchiveRoute
   ApiAgentsIdRestoreRoute: typeof ApiAgentsIdRestoreRoute
-  ApiAgentsIdSkillsRoute: typeof ApiAgentsIdSkillsRoute
 }
 
 const ApiAgentsIdRouteChildren: ApiAgentsIdRouteChildren = {
   ApiAgentsIdArchiveRoute: ApiAgentsIdArchiveRoute,
   ApiAgentsIdRestoreRoute: ApiAgentsIdRestoreRoute,
-  ApiAgentsIdSkillsRoute: ApiAgentsIdSkillsRoute,
 }
 
 const ApiAgentsIdRouteWithChildren = ApiAgentsIdRoute._addFileChildren(
@@ -2008,24 +2069,6 @@ const ApiIssuesRouteWithChildren = ApiIssuesRoute._addFileChildren(
   ApiIssuesRouteChildren,
 )
 
-interface ApiSkillsRouteChildren {
-  ApiSkillsIdRoute: typeof ApiSkillsIdRoute
-  ApiSkillsImportRoute: typeof ApiSkillsImportRoute
-  ApiSkillsPreviewRoute: typeof ApiSkillsPreviewRoute
-  ApiSkillsSearchRoute: typeof ApiSkillsSearchRoute
-}
-
-const ApiSkillsRouteChildren: ApiSkillsRouteChildren = {
-  ApiSkillsIdRoute: ApiSkillsIdRoute,
-  ApiSkillsImportRoute: ApiSkillsImportRoute,
-  ApiSkillsPreviewRoute: ApiSkillsPreviewRoute,
-  ApiSkillsSearchRoute: ApiSkillsSearchRoute,
-}
-
-const ApiSkillsRouteWithChildren = ApiSkillsRoute._addFileChildren(
-  ApiSkillsRouteChildren,
-)
-
 interface ApiWorkspacesIdInvitationsRouteChildren {
   ApiWorkspacesIdInvitationsInvitationIdRoute: typeof ApiWorkspacesIdInvitationsInvitationIdRoute
 }
@@ -2126,9 +2169,13 @@ const ApiCommentsIdRouteWithChildren = ApiCommentsIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  ArchitectureRoute: ArchitectureRoute,
   FeaturesRoute: FeaturesRoute,
+  HarnessyRoute: HarnessyRoute,
   LoginRoute: LoginRoute,
+  RoadmapRoute: RoadmapRoute,
   SignupRoute: SignupRoute,
+  ApiSplatRoute: ApiSplatRoute,
   ApiAgentsRoute: ApiAgentsRouteWithChildren,
   ApiAutomationsRoute: ApiAutomationsRouteWithChildren,
   ApiConnectionsRoute: ApiConnectionsRouteWithChildren,
@@ -2137,7 +2184,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiIssuesRoute: ApiIssuesRouteWithChildren,
   ApiMeRoute: ApiMeRoute,
   ApiProjectsRoute: ApiProjectsRoute,
-  ApiSkillsRoute: ApiSkillsRouteWithChildren,
   ApiUploadFileRoute: ApiUploadFileRoute,
   ApiWorkspacesRoute: ApiWorkspacesRouteWithChildren,
   ApiAttachmentsIdRoute: ApiAttachmentsIdRoute,
@@ -2145,21 +2191,35 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatThreadsRoute: ApiChatThreadsRouteWithChildren,
   ApiCommentsIdRoute: ApiCommentsIdRouteWithChildren,
   ApiDevIssueRunPlanRoute: ApiDevIssueRunPlanRoute,
+  ApiDiscordInstallRoute: ApiDiscordInstallRoute,
+  ApiDiscordSetupRoute: ApiDiscordSetupRoute,
+  ApiExecutorInstallRoute: ApiExecutorInstallRoute,
+  ApiExecutorPreviewRoute: ApiExecutorPreviewRoute,
+  ApiExecutorRegistryRoute: ApiExecutorRegistryRoute,
   ApiGithubCallbackRoute: ApiGithubCallbackRoute,
   ApiGithubInstallRoute: ApiGithubInstallRoute,
   ApiGithubSetupRoute: ApiGithubSetupRoute,
   ApiInternalCapabilitySyncRoute: ApiInternalCapabilitySyncRoute,
+  ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiRunsIdRoute: ApiRunsIdRoute,
   ApiDocumentsIdDisplayRoute: ApiDocumentsIdDisplayRoute,
   ApiDocumentsIdDocxRoute: ApiDocumentsIdDocxRoute,
   ApiDocumentsIdMetadataRoute: ApiDocumentsIdMetadataRoute,
-  ApiDocumentsIdTrackedChangeIdsRoute: ApiDocumentsIdTrackedChangeIdsRoute,
   ApiDocumentsIdVersionsRoute: ApiDocumentsIdVersionsRoute,
+  ApiExecutorOauthStartRoute: ApiExecutorOauthStartRoute,
   ApiPermissionRequestsIdResolveRoute: ApiPermissionRequestsIdResolveRoute,
   ApiWorkProductsIdReviewRoute: ApiWorkProductsIdReviewRoute,
-  ApiDocumentsDocumentIdEditsEditIdActionRoute:
-    ApiDocumentsDocumentIdEditsEditIdActionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
