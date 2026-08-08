@@ -22,7 +22,7 @@ Local development configuration lives in root `.env`. Web, database tooling, and
 Required for normal local development:
 
 ```bash
-CLOUDFLARE_ACCOUNT_ID=<account that owns garden-files-staging>
+CLOUDFLARE_ACCOUNT_ID=<your Cloudflare account>
 DATABASE_URL=postgresql://...
 BETTER_AUTH_SECRET=...
 EXECUTOR_SECRET_KEY=...
@@ -30,13 +30,14 @@ BETTER_AUTH_URL=http://localhost:3000
 ENVIRONMENT=development
 ```
 
-GitHub connector development also needs the GitHub app fields from the root `.env.example`.
+`RESEND_API_KEY`, `EXA_API_KEY`, and connector credentials are optional until
+their corresponding email, search, or connector feature is used.
 
 ## Commands
 
 | Command                                         | Description                                                      |
 | ----------------------------------------------- | ---------------------------------------------------------------- |
-| `pnpm --filter @garden/web dev`                 | Start TanStack Start on `localhost` with full bindings           |
+| `pnpm --filter @garden/web dev`                 | Start with remote bindings and Sandbox containers                |
 | `pnpm --filter @garden/web dev:local`           | Start TanStack Start directly on `localhost` with local bindings |
 | `pnpm --filter @garden/web build`               | Build production worker bundle                                   |
 | `pnpm --filter @garden/web typecheck`           | Run TypeScript without emit                                      |
@@ -45,7 +46,12 @@ GitHub connector development also needs the GitHub app fields from the root `.en
 
 ## Cloudflare Runtime
 
-The local Worker uses `wrangler.jsonc` for Durable Objects, D1, R2, Workflows, and sandbox bindings. Key runtime pieces:
+The local Worker uses `wrangler.jsonc` for Durable Objects, D1, R2, Workflows,
+and sandbox bindings. Root `pnpm dev` selects local-only mode. The direct web
+`dev` command is the advanced remote-binding mode: copy
+`wrangler.containers.jsonc` to ignored `wrangler.containers.local.jsonc`, set
+real Hyperdrive and D1 IDs, authenticate Wrangler, and provide Docker. Key
+runtime pieces:
 
 - `AgentDO` hosts per-agent state and WebSocket/RPC behavior.
 - `FILES` stores uploaded files; `LOADER` supplies isolated Executor and agent code execution.
@@ -81,7 +87,6 @@ curl -fsS http://localhost:3000/api/inbox
 curl -fsS http://localhost:3000/api/agents
 curl -fsS http://localhost:3000/api/skills
 curl -fsS http://localhost:3000/api/connections
-curl -fsS http://localhost:3000/api/runtimes
 ```
 
 Browser-session auth is usually easier through `agent-browser`; plain `curl` needs the same local auth cookies.

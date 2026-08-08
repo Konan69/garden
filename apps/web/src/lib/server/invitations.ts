@@ -115,8 +115,8 @@ function toSignupInvitationStatus(
  * Better Auth updates an invite to accepted, then inserts a member, so a repeat
  * accept can throw on Garden's unique organization/user index. Keeping this
  * lookup local makes invite accept idempotent while still using Better Auth for
- * normal session cookie updates. References: PostHog issue 019ee68c..., Better
- * Auth `acceptInvitation` in `crud-invites.mjs`, and better-result Result docs.
+ * normal session cookie updates. References: Better Auth `acceptInvitation` in
+ * `crud-invites.mjs` and better-result Result docs.
  */
 async function findInvitationMembership(args: {
   db: Db

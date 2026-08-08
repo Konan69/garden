@@ -47,7 +47,7 @@ export const Route = createFileRoute('/_authenticated')({
  * render failures look like a full-app 500. Keeping the fallback at the auth
  * boundary preserves the document and leaves users a retry path. References:
  * TanStack Router `errorComponent` and the observed create-issue workspace
- * provider crash in PostHog issue 019ee9b6-0fed-78b1-8a51-b5c0e3f88a7c.
+ * provider failure.
  */
 function AuthenticatedRouteError({ error, reset }: ErrorComponentProps) {
   return (
