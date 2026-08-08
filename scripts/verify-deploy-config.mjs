@@ -69,10 +69,17 @@ assert.match(gitignoreSource, /apps\/web\/wrangler\.local\.jsonc/)
 assert.match(gitignoreSource, /apps\/web\/wrangler\.containers\.local\.jsonc/)
 assert.match(devSource, /wrangler\.containers\.local\.jsonc/)
 assert.match(devSource, /wrangler\.local\.jsonc/)
+assert.match(devSource, /CLOUDFLARE_VITE_REMOTE_BINDINGS = '1'/)
 assert.match(
   devSource,
-  /CLOUDFLARE_VITE_REMOTE_BINDINGS \?\?= localOnly \? '0' : '1'/,
+  /useLocalOverlay = containers && existsSync\(localFile\)/,
 )
+assert.doesNotMatch(devSource, /localOnly|--local/)
+assert.equal(
+  packageJson.scripts.dev,
+  'turbo run dev:local --ui=tui --filter=@garden/web',
+)
+assert.equal(webPackageJson.scripts['dev:local'], 'node ./scripts/dev.mjs')
 
 const uniqueFields = [
   'appName',

@@ -21,7 +21,9 @@ if (!accountId || !apiKey) {
 const workersai = createWorkersAI({
   accountId,
   apiKey,
-  gateway: { id: 'garden-staging' },
+  ...(process.env.AI_GATEWAY_ID?.trim()
+    ? { gateway: { id: process.env.AI_GATEWAY_ID.trim() } }
+    : {}),
 })
 const model = workersai('@cf/moonshotai/kimi-k2.7-code')
 
