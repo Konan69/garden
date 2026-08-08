@@ -146,8 +146,8 @@ garden/
 - [Node.js](https://nodejs.org) (v22.12+)
 - [pnpm](https://pnpm.io) (v10.33.0)
 - A Postgres database ([Neon](https://neon.tech) recommended)
-- Docker Desktop or Docker Engine only for remote-binding development with Sandbox containers
-- Cloudflare Wrangler auth when you need to manage deployed Worker resources
+- A Cloudflare account and Wrangler auth for Workers AI during local development
+- Docker Desktop or Docker Engine only for remote infrastructure with Sandbox containers
 
 ### Setup
 
@@ -157,6 +157,9 @@ git clone https://github.com/Flow-Research/garden.git && cd garden
 
 # Install dependencies
 pnpm install
+
+# Authenticate the Workers AI binding used in local development
+pnpm --filter @garden/web exec wrangler login
 
 # Configure local environment
 cp .env.example .env
@@ -169,6 +172,7 @@ cp .env.example .env
 #   ENVIRONMENT=development
 #
 #   Optional:
+#   AI_GATEWAY_ID for routing Workers AI through your own AI Gateway
 #   RESEND_API_KEY for transactional email
 #   GitHub / Google / Slack / Discord keys for those connectors
 #   EXA_API_KEY for web search
@@ -192,6 +196,7 @@ Open `http://localhost:3000`.
 - The web app runs on `localhost:3000`.
 - D1, R2, Durable Objects, and Workflows run in the local Workers simulator.
 - Hyperdrive connects to `DATABASE_URL` from root `.env`.
+- Workers AI uses Cloudflare's remote binding and may incur account usage.
 
 `pnpm dev:remote` enables Cloudflare remote bindings and Sandbox containers. It
 requires Docker, Wrangler authentication, and ignored
@@ -203,20 +208,20 @@ OAuth callbacks are configured for `localhost:3000` in local env and Wrangler co
 
 ### Commands
 
-| Command                               | Description                                                        |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| `pnpm dev`                            | Start the web Worker with local bindings                           |
-| `pnpm dev:local`                      | Start the web Worker with local bindings                           |
-| `pnpm dev:remote`                     | Start with remote bindings and Sandbox containers                  |
-| `pnpm dev:reset`                      | Stop Garden dev processes started by Turbo/Vite/Wrangler           |
-| `pnpm dev:web`                        | Start only the web app with local bindings                         |
-| `pnpm --filter @garden/web dev:local` | Start only the web app directly on `localhost` with local bindings |
-| `pnpm build`                          | Build all packages                                                 |
-| `pnpm typecheck`                      | Type-check everything                                              |
-| `pnpm lint`                           | Lint with oxlint                                                   |
-| `pnpm format:write`                   | Format with oxfmt                                                  |
-| `pnpm test`                           | Run all tests                                                      |
-| `pnpm clean`                          | Clean build artifacts                                              |
+| Command                               | Description                                                    |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `pnpm dev`                            | Start with local state and remote Workers AI                   |
+| `pnpm dev:local`                      | Start with local state and remote Workers AI                   |
+| `pnpm dev:remote`                     | Start with remote bindings and Sandbox containers              |
+| `pnpm dev:reset`                      | Stop Garden dev processes started by Turbo/Vite/Wrangler       |
+| `pnpm dev:web`                        | Start only the web app with local state and remote Workers AI  |
+| `pnpm --filter @garden/web dev:local` | Start only the web app directly with local state and remote AI |
+| `pnpm build`                          | Build all packages                                             |
+| `pnpm typecheck`                      | Type-check everything                                          |
+| `pnpm lint`                           | Lint with oxlint                                               |
+| `pnpm format:write`                   | Format with oxfmt                                              |
+| `pnpm test`                           | Run all tests                                                  |
+| `pnpm clean`                          | Clean build artifacts                                          |
 
 **Database:**
 

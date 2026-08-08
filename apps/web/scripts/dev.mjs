@@ -14,14 +14,12 @@ for (const [key, value] of Object.entries(rootEnv)) {
 }
 
 process.env.NODE_OPTIONS ??= '--max-old-space-size=3072'
-const localOnly = args.has('--local')
 const configSelection = selectWorkerConfig({
   containers: args.has('--containers'),
-  localOnly,
 })
 process.env.CLOUDFLARE_WORKER_CONFIG_PATH ??= configSelection.path
-process.env.CLOUDFLARE_VITE_REMOTE_BINDINGS ??= localOnly ? '0' : '1'
-if (localOnly) {
+process.env.CLOUDFLARE_VITE_REMOTE_BINDINGS = '1'
+if (!args.has('--containers')) {
   process.env.ENVIRONMENT = 'development'
 }
 if (process.env.DATABASE_URL) {
@@ -45,17 +43,17 @@ child.on('exit', (code, signal) => {
 
 /**
  * Keeps tracked Wrangler config safe for public clones while preserving local
- * overlays. Public D1, R2, and Hyperdrive bindings remain local placeholders;
- * only the AI binding opts into Cloudflare because Workers AI has no local
- * simulator. `--local` explicitly disables every remote binding.
+ * overlays. The default tracked config keeps D1, R2, Durable Objects, Workflows,
+ * and Hyperdrive local; only Workers AI opts into Cloudflare because it has no
+ * local simulator. Container mode may use an ignored account-specific overlay.
  */
-function selectWorkerConfig({ containers, localOnly }) {
+function selectWorkerConfig({ containers }) {
   const publicPath = containers ? 'wrangler.containers.jsonc' : 'wrangler.jsonc'
   const localPath = containers
     ? 'wrangler.containers.local.jsonc'
     : 'wrangler.local.jsonc'
   const localFile = fileURLToPath(new URL(`../${localPath}`, import.meta.url))
-  const useLocalOverlay = !localOnly && existsSync(localFile)
+  const useLocalOverlay = containers && existsSync(localFile)
 
   return {
     path: useLocalOverlay ? localPath : publicPath,

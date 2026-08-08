@@ -4,7 +4,6 @@ import { PostHog } from 'posthog-node'
 import { createWorkersAI } from 'workers-ai-provider'
 import { resolveGardenAnalyticsEnvironment } from '@garden/observability/analytics/events'
 
-const DEFAULT_AI_GATEWAY_ID = 'garden-staging'
 const DEFAULT_POSTHOG_HOST = 'https://us.i.posthog.com'
 
 export type AgentModelProvider = 'workers-ai'
@@ -95,9 +94,10 @@ export function getDefaultAgentModelProfile(): AgentModelProfile {
  */
 export function createAgentModel(config: AgentModelConfig): LanguageModel {
   const profile = config.profile ?? DEFAULT_AGENT_MODEL_PROFILE
+  const gatewayId = config.gatewayId?.trim()
   const workersai = createWorkersAI({
     binding: config.ai,
-    gateway: { id: config.gatewayId ?? DEFAULT_AI_GATEWAY_ID },
+    ...(gatewayId ? { gateway: { id: gatewayId } } : {}),
   })
   const model = workersai(profile.id)
   const token = config.env?.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim()
