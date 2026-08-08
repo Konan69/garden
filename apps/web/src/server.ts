@@ -1,5 +1,5 @@
 import handler from '@tanstack/react-start/server-entry'
-import { getAgentByName } from 'agents'
+import { routeAgentRequest } from 'agents'
 import {
   AgentDO,
   AutomationRunSubAgent,
@@ -10,7 +10,6 @@ import {
 } from '@garden/agent-runtime'
 import { proxyToSandbox, Sandbox } from '@cloudflare/sandbox'
 import { Result } from 'better-result'
-import { eq, max } from 'drizzle-orm'
 import { createAuth } from '@/lib/auth'
 import type { AppEnv } from '@/lib/server/env'
 import { bindAppEnv } from '@/lib/server/env'
@@ -19,9 +18,6 @@ import {
   requireAgentAccess,
 } from '@/lib/server/agent-do-router'
 import { reconcile } from '@/lib/server/issue-run-reconciler'
-import { ensureAgentRow } from '@/lib/server/chat-agents'
-import { getDb, schema } from '@/lib/server/db'
-import { disposeRpcResult } from '@garden/core/platform/rpc'
 import {
   createGardenLogger,
   errorFields,
@@ -30,8 +26,20 @@ import {
   withRequestIdHeader,
   type GardenLogger,
   type GardenLogFields,
-} from '@garden/core/observability/logger'
-import { createAppRequestContext } from '@/lib/server/context'
+} from '@garden/observability/logger'
+import {
+  createAppRequestContext,
+  getLoggedAuthSession,
+} from '@/lib/server/context'
+import { capturePostHogException } from '@/lib/posthog-server'
+import {
+  ExecutorMcpExecutionOwnerDirectory,
+  ExecutorMcpSession,
+} from '@/lib/server/executor-engine/mcp'
+import {
+  isPostHogProxyRequest,
+  proxyPostHogRequest,
+} from '@/lib/server/posthog-proxy'
 
 export { AgentDO }
 export { AutomationRunSubAgent }
@@ -40,33 +48,56 @@ export { ChatSubAgent }
 export { IssueRunSubAgent }
 export { RunWorkflow }
 export { Sandbox }
+export { ExecutorMcpExecutionOwnerDirectory, ExecutorMcpSession }
 
 type ServerEnv = AppEnv
 
 const AGENT_DO_AUTH_CACHE_TTL_MS = 60_000
-const RECONCILE_ON_FETCH_INTERVAL_MS = 5_000
-const agentDoAuthCache = new Map<string, number>()
-let lastFetchReconcileAt = 0
+const AGENT_ROUTING_RETRY = { maxAttempts: 3 }
+type AgentDoAuthCacheEntry = {
+  expiresAt: number
+  agentId: string
+  workspaceId: string
+}
+const agentDoAuthCache = new Map<string, AgentDoAuthCacheEntry>()
 const webLogger = createGardenLogger({
   service: 'garden-staging',
   component: 'worker-entry',
 })
 
-function scheduleFetchReconcile(env: ServerEnv, ctx?: ExecutionContext) {
-  const now = Date.now()
-  if (now - lastFetchReconcileAt < RECONCILE_ON_FETCH_INTERVAL_MS) return
-  lastFetchReconcileAt = now
-
-  const task = reconcile(env).then((result) => {
-    if (result.isErr()) {
-      webLogger.error('issue_run.reconcile.failed', {
-        message: result.error.message,
-      })
-    }
-  })
-  if (ctx) {
-    ctx.waitUntil(task)
-  }
+/**
+ * Sends worker-boundary exceptions to PostHog without delaying the response.
+ * PostHog's Cloudflare Workers docs recommend `ctx.waitUntil()` with immediate
+ * capture because isolates can end before queued flushes. Before this hook,
+ * `Result.tryPromise` logged thrown request errors but did not create PostHog
+ * Error Tracking events; after it, response behavior stays unchanged while the
+ * edge-safe SDK records the exception. References: PostHog Cloudflare Workers
+ * and Node error-tracking installation docs.
+ */
+function captureWorkerException(args: {
+  ctx?: ExecutionContext
+  error: unknown
+  logger: GardenLogger
+  distinctId?: string
+  properties: Record<string | number, unknown>
+}) {
+  args.ctx?.waitUntil(
+    Result.tryPromise({
+      try: async () =>
+        await capturePostHogException({
+          error: args.error,
+          distinctId: args.distinctId,
+          properties: args.properties,
+        }),
+      catch: (cause) => cause,
+    }).then((result) => {
+      if (result.isErr()) {
+        args.logger.warn('posthog.exception_capture.failed', {
+          ...errorFields(result.error),
+        })
+      }
+    }),
+  )
 }
 
 function responseFromCaughtError(args: {
@@ -106,260 +137,46 @@ function getAgentRuntimeNameFromRequest(request: Request) {
   return agentRuntimeName
 }
 
+/**
+ * Route authenticated agent HTTP/WebSocket traffic through the SDK router.
+ *
+ * Before this used `getAgentByName(...).fetch(...)`, which performs an extra
+ * RPC `setName()` handshake meant for RPC method calls. WebSocket connects then
+ * logged Cloudflare's "RPC result was not disposed properly" warning before the
+ * 101 handoff. The SDK router mirrors PartyServer routing: parse URL, set
+ * routing headers, and call `namespace.get(id).fetch(...)` directly with retry.
+ * Reference checked: installed `agents` / `partyserver` routeAgentRequest path.
+ */
 async function routeAgentDoRequest(request: Request, env: ServerEnv) {
   const agentRuntimeName = getAgentRuntimeNameFromRequest(request)
   if (!agentRuntimeName) return new Response('Not found', { status: 404 })
 
-  const routedRequest = new Request(request)
-  routedRequest.headers.set('x-partykit-namespace', 'agent-d-o')
-
-  const agent = await getAgentByName(env.AgentDO, agentRuntimeName)
-  return await agent.fetch(routedRequest)
+  const response = await routeAgentRequest(request, env, {
+    routingRetry: AGENT_ROUTING_RETRY,
+  })
+  return response ?? new Response('Not found', { status: 404 })
 }
 
-async function handleChatAgentFixtureRequest(request: Request, env: ServerEnv) {
-  if (request.method !== 'POST')
-    return new Response('Not found', { status: 404 })
-  if (
-    request.headers.get('x-garden-internal-secret') !== env.BETTER_AUTH_SECRET
-  ) {
-    return new Response('Unauthorized', { status: 401 })
+/**
+ * Captures attribution fields before an agent request enters the Durable Object.
+ * A 101 handoff can fail after auth but before completion logging, leaving
+ * high-volume traffic unattributed. These fields log
+ * only routing/shape metadata, never websocket keys or query values, so future
+ * reconnect storms can be traced to the authenticated user/workspace that opened
+ * the channel.
+ */
+function agentRequestAuditFields(request: Request) {
+  const url = new URL(request.url)
+  const upgrade = request.headers.get('upgrade')?.toLowerCase() ?? null
+
+  return {
+    route: 'agent',
+    upgrade,
+    isWebSocket: upgrade === 'websocket',
+    hasPartyKitKey: url.searchParams.has('_pk'),
+    userAgent: request.headers.get('user-agent'),
+    country: request.headers.get('cf-ipcountry'),
   }
-
-  const parsed = await request.json().then(
-    (value) => ({ ok: true as const, value }),
-    (cause: unknown) => ({
-      ok: false as const,
-      error: cause instanceof Error ? cause.message : 'Invalid JSON',
-    }),
-  )
-  if (!parsed.ok) return new Response(parsed.error, { status: 400 })
-
-  const body = parsed.value as {
-    message?: unknown
-    mode?: unknown
-    target?: unknown
-    userId?: unknown
-    workspaceId?: unknown
-  }
-  const target =
-    body.target === 'issue-run' ||
-    body.target === 'issue-run-work' ||
-    body.target === 'automation-run' ||
-    body.target === 'automation-schedule'
-      ? body.target
-      : 'chat'
-  const workspaceId =
-    typeof body.workspaceId === 'string' ? body.workspaceId : null
-  const userId = typeof body.userId === 'string' ? body.userId : null
-  if (!workspaceId || !userId) {
-    return new Response('workspaceId and userId are required', { status: 400 })
-  }
-
-  const db = getDb(env)
-  const agent = await ensureAgentRow({ workspaceId, ownerUserId: userId })
-  const hostName = agent.hostName
-  if (!hostName)
-    return new Response('Agent hostName is missing', { status: 400 })
-
-  const stub = await getAgentByName(env.AgentDO, hostName)
-  if (target === 'chat') {
-    const threadId = crypto.randomUUID()
-    await db.insert(schema.chatThread).values({
-      id: threadId,
-      workspaceId,
-      ownerUserId: userId,
-      agentId: agent.id,
-      runtimeKind: 'chat',
-      runtimeKey: threadId,
-      title: '[fixture] live chat agent',
-    })
-    await disposeRpcResult(await stub.ensureThread(threadId))
-    const tools = await disposeRpcResult(await stub.debugThreadTools(threadId))
-    const prompt = await disposeRpcResult(
-      await stub.debugThreadPrompt(threadId),
-    )
-    const toolNames = tools.inventory.map((tool) => tool.key)
-    const base = {
-      ok: true,
-      target,
-      agentId: agent.id,
-      hostName,
-      threadId,
-      hasGithubRepoSearchTool: toolNames.includes(
-        'tool_github_search_repositories',
-      ),
-      hasGithubRoutingPrompt: prompt.prompt.includes(
-        'search_repositories tool',
-      ),
-      hasLoadContextTool: toolNames.includes('load_context'),
-      hasSkillsPrompt: prompt.prompt.includes('Available workspace skills'),
-      loadedSkillKeys: prompt.loadedSkillKeys,
-    }
-    if (body.mode === 'inspect') return Response.json({ ...base, toolNames })
-    const message = typeof body.message === 'string' ? body.message : null
-    if (!message)
-      return new Response('message is required unless mode=inspect', {
-        status: 400,
-      })
-    const turn = await disposeRpcResult(
-      await stub.runThreadFixtureTurn(threadId, { clear: true, message }),
-    )
-    const [afterPrompt, workspace] = await Promise.all([
-      disposeRpcResult(await stub.debugThreadPrompt(threadId)),
-      disposeRpcResult(await stub.debugThreadWorkspace(threadId)),
-    ])
-    return Response.json({
-      ...base,
-      turn,
-      afterTurn: {
-        loadedSkillKeys: afterPrompt.loadedSkillKeys,
-        skillPaths: workspace.samplePaths
-          .map((entry) => entry.path)
-          .filter((path) => path.includes('/.agents/skills/')),
-      },
-    })
-  }
-
-  if (target === 'issue-run' || target === 'issue-run-work') {
-    const [{ number: maxNumber }] = await db
-      .select({ number: max(schema.issue.number) })
-      .from(schema.issue)
-      .where(eq(schema.issue.workspaceId, workspaceId))
-    const issueId = crypto.randomUUID()
-    const runId = crypto.randomUUID()
-    await db.transaction(async (tx) => {
-      await tx.insert(schema.issue).values({
-        id: issueId,
-        workspaceId,
-        number: (maxNumber ?? 0) + 1,
-        title:
-          target === 'issue-run-work'
-            ? '[fixture] issue run light work'
-            : '[fixture] issue run',
-        description:
-          typeof body.message === 'string'
-            ? body.message
-            : 'Fixture issue run.',
-        status: 'backlog',
-        priority: 'medium',
-        assigneeType: 'agent',
-        assigneeId: agent.id,
-        createdBy: userId,
-      })
-      await tx.insert(schema.issueRun).values({
-        id: runId,
-        workspaceId,
-        issueId,
-        agentId: agent.id,
-        hostName,
-        status: 'queued',
-        triggerSource: 'manual',
-      })
-      await tx
-        .update(schema.issue)
-        .set({ activeRunId: runId })
-        .where(eq(schema.issue.id, issueId))
-    })
-    const base = {
-      ok: true,
-      target,
-      agentId: agent.id,
-      hostName,
-      issueId,
-      runId,
-    }
-    if (body.mode === 'inspect') return Response.json(base)
-    await disposeRpcResult(await stub.startIssueRunWorkflow({ issueId, runId }))
-    return Response.json({ ...base, workflowStarted: true })
-  }
-
-  const automationId = crypto.randomUUID()
-  const runId = crypto.randomUUID()
-  await db.insert(schema.automation).values({
-    id: automationId,
-    workspaceId,
-    title:
-      target === 'automation-schedule'
-        ? '[fixture] automation schedule'
-        : '[fixture] automation run',
-    description:
-      typeof body.message === 'string'
-        ? body.message
-        : 'Fixture automation run.',
-    assigneeAgentId: agent.id,
-    priority: 'medium',
-    status: 'active',
-    concurrencyPolicy: 'skip',
-    createdBy: userId,
-    systemPrompt:
-      typeof body.message === 'string'
-        ? body.message
-        : 'Inspect runtime and report readiness.',
-  })
-
-  if (target === 'automation-schedule') {
-    const triggerId = crypto.randomUUID()
-    const nextRunAt = new Date(Date.now() + 3_000)
-    await db.insert(schema.automationTrigger).values({
-      id: triggerId,
-      automationId,
-      kind: 'schedule',
-      enabled: true,
-      label: '[fixture] schedule',
-      cronExpression: '* * * * *',
-      timezone: 'UTC',
-    })
-    const triggerStub = env.AUTOMATION_TRIGGER.get(
-      env.AUTOMATION_TRIGGER.idFromName(triggerId),
-    )
-    const installResult = Result.deserialize<void, { message?: string }>(
-      (await triggerStub.install({
-        triggerId,
-        automationId,
-        concurrencyPolicy: 'skip',
-        nextRunAt,
-      })) as unknown,
-    )
-    if (installResult.isErr()) {
-      return new Response(installResult.error.message ?? 'Install failed', {
-        status: 500,
-      })
-    }
-
-    const base = {
-      ok: true,
-      target,
-      agentId: agent.id,
-      hostName,
-      automationId,
-      triggerId,
-      nextRunAt: nextRunAt.toISOString(),
-    }
-    return Response.json({ ...base, scheduled: true })
-  }
-
-  await db.insert(schema.automationRun).values({
-    id: runId,
-    workspaceId,
-    automationId,
-    source: 'manual',
-    status: 'queued',
-    agentId: agent.id,
-    hostName,
-    triggerPayload: {},
-  })
-  const base = {
-    ok: true,
-    target,
-    agentId: agent.id,
-    hostName,
-    automationId,
-    runId,
-  }
-  if (body.mode === 'inspect') return Response.json(base)
-  await disposeRpcResult(await stub.startAutomationRunWorkflow({ runId }))
-  return Response.json({ ...base, workflowStarted: true })
 }
 
 async function authorizeAgentRequest(
@@ -376,8 +193,13 @@ async function authorizeAgentRequest(
     }
   }
 
-  const auth = createAuth(env, request)
-  const session = await auth.api.getSession({ headers: request.headers })
+  const auth = await createAuth(env, request)
+  const session = await getLoggedAuthSession({
+    auth,
+    request,
+    source: 'agent-router',
+    fields: { route: 'agent', agentRuntimeName },
+  })
   if (!session?.user) {
     logger.warn('agent.request.unauthorized')
     return {
@@ -390,9 +212,9 @@ async function authorizeAgentRequest(
   const userLogger = logger.child({ userId: session.user.id })
 
   const cacheKey = `${session.user.id}:${agentRuntimeName}`
-  const cachedUntil = agentDoAuthCache.get(cacheKey) ?? 0
   const now = Date.now()
-  if (cachedUntil <= now) {
+  let access = agentDoAuthCache.get(cacheKey) ?? null
+  if (!access || access.expiresAt <= now) {
     const accessResult = await requireAgentAccess(
       env,
       agentRuntimeName,
@@ -411,8 +233,19 @@ async function authorizeAgentRequest(
       }
     }
 
-    agentDoAuthCache.set(cacheKey, now + AGENT_DO_AUTH_CACHE_TTL_MS)
+    access = {
+      ...accessResult.value,
+      expiresAt: now + AGENT_DO_AUTH_CACHE_TTL_MS,
+    }
+    agentDoAuthCache.set(cacheKey, access)
   }
+
+  userLogger.info('agent.request.connecting', {
+    ...agentRequestAuditFields(request),
+    agentRuntimeName,
+    agentId: access.agentId,
+    workspaceId: access.workspaceId,
+  })
 
   return { request, response: null, userId: session.user.id }
 }
@@ -426,6 +259,39 @@ function requestCompletionFields(
     ...responseFields(response, startedAt),
     ...extra,
   }
+}
+
+/**
+ * Logs framework-returned 5xx responses before they leave the Worker. The
+ * TanStack app handler can convert a thrown route error into a generic HTTP 500
+ * response, which means the top-level `Result.tryPromise` sees success and old
+ * logs only said `web.request.completed`. This logging-only boundary keeps the
+ * original response unchanged but records status, route, duration, and a small
+ * redacted body preview so opaque `HTTPError` responses are searchable.
+ */
+async function logReturnedErrorResponse(input: {
+  event: string
+  response: Response
+  startedAt: number
+  logger: GardenLogger
+  fields?: GardenLogFields
+}) {
+  if (input.response.status < 500 || input.response.status > 599) return
+
+  const bodyPreviewResult = await Result.tryPromise({
+    try: async () => await input.response.clone().text(),
+    catch: (cause) => cause,
+  })
+
+  input.logger.error(input.event, {
+    ...requestCompletionFields(input.response, input.startedAt, input.fields),
+    ...(bodyPreviewResult.isOk()
+      ? { responseBodyPreview: bodyPreviewResult.value.slice(0, 1_000) }
+      : {
+          responseBodyPreview: '[unavailable]',
+          ...errorFields(bodyPreviewResult.error),
+        }),
+  })
 }
 
 export default {
@@ -449,7 +315,10 @@ export default {
 
   async fetch(request: Request, env: ServerEnv, ctx?: ExecutionContext) {
     bindAppEnv(env)
-    scheduleFetchReconcile(env, ctx)
+
+    if (isPostHogProxyRequest(request)) {
+      return proxyPostHogRequest(request, env)
+    }
 
     const startedAt = performance.now()
     const baseRequestFields = requestFields(request)
@@ -461,18 +330,17 @@ export default {
         sandboxResponse,
         baseRequestFields.requestId,
       )
-      logger.info(
-        'web.request.completed',
-        requestCompletionFields(response, startedAt, { route: 'sandbox' }),
-      )
+      await logReturnedErrorResponse({
+        event: 'web.request.response_error',
+        response,
+        startedAt,
+        logger,
+        fields: { route: 'sandbox' },
+      })
       return response
     }
 
     const url = new URL(request.url)
-
-    if (url.pathname === '/api/dev/chat-agent-fixture') {
-      return await handleChatAgentFixtureRequest(request, env)
-    }
 
     if (url.pathname.startsWith('/agents/')) {
       const agentAuth = await authorizeAgentRequest(request, env, logger)
@@ -481,13 +349,16 @@ export default {
           agentAuth.response,
           baseRequestFields.requestId,
         )
-        logger.info(
-          'web.request.completed',
-          requestCompletionFields(response, startedAt, {
+        await logReturnedErrorResponse({
+          event: 'web.request.response_error',
+          response,
+          startedAt,
+          logger,
+          fields: {
             route: 'agent-auth',
             ...(agentAuth.userId ? { userId: agentAuth.userId } : {}),
-          }),
-        )
+          },
+        })
         return response
       }
 
@@ -499,6 +370,17 @@ export default {
         catch: (cause) => cause,
       })
       if (agentResponse.isErr()) {
+        captureWorkerException({
+          ctx,
+          error: agentResponse.error,
+          logger: agentLogger,
+          distinctId: agentAuth.userId ?? undefined,
+          properties: {
+            event: 'agent.request.failed',
+            route: 'agent',
+            ...baseRequestFields,
+          },
+        })
         return responseFromCaughtError({
           event: 'agent.request.failed',
           status: 502,
@@ -513,20 +395,22 @@ export default {
           agentResponse.value,
           baseRequestFields.requestId,
         )
-        agentLogger.info(
-          'web.request.completed',
-          requestCompletionFields(response, startedAt, { route: 'agent' }),
-        )
+        await logReturnedErrorResponse({
+          event: 'web.request.response_error',
+          response,
+          startedAt,
+          logger: agentLogger,
+          fields: { route: 'agent' },
+        })
         return response
       }
     }
 
-    const appContext = createAppRequestContext(env, request)
+    const appContext = createAppRequestContext(env, request, (promise) =>
+      ctx?.waitUntil(promise),
+    )
     const appResponse = await Result.tryPromise({
-      try: async () =>
-        handler.fetch(request, {
-          context: appContext,
-        }),
+      try: async () => handler.fetch(request, { context: appContext }),
       catch: (cause) => cause,
     })
 
@@ -538,24 +422,70 @@ export default {
         })
       : null
     if (sessionResult?.isErr()) {
-      logger.warn('auth.session.log_context_failed', errorFields(sessionResult.error))
+      logger.warn(
+        'auth.session.log_context_failed',
+        errorFields(sessionResult.error),
+      )
     }
     const session = sessionResult?.isOk() ? sessionResult.value : null
     const appLogger = session?.user?.id
       ? logger.child({ userId: session.user.id })
       : logger
 
+    const closeResult = await Result.tryPromise({
+      try: async () => await appContext.close(),
+      catch: (cause) => cause,
+    })
+    if (closeResult.isErr()) {
+      appLogger.warn(
+        'web.request.db_close_failed',
+        errorFields(closeResult.error),
+      )
+    }
+
     if (appResponse.isOk()) {
       const response = withRequestIdHeader(
         appResponse.value,
         baseRequestFields.requestId,
       )
-      appLogger.info(
-        'web.request.completed',
-        requestCompletionFields(response, startedAt, { route: 'app' }),
-      )
+      await logReturnedErrorResponse({
+        event: 'web.request.response_error',
+        response,
+        startedAt,
+        logger: appLogger,
+        fields: { route: 'tanstack-start' },
+      })
+      if (response.status >= 500) {
+        captureWorkerException({
+          ctx,
+          error: new Error(
+            `${request.method} ${new URL(request.url).pathname} returned ${response.status}`,
+          ),
+          logger: appLogger,
+          distinctId: session?.user?.id,
+          properties: {
+            event: 'web.request.response_error',
+            route: 'tanstack-start',
+            status: response.status,
+            workspace_id: session?.session.activeOrganizationId ?? null,
+            ...baseRequestFields,
+          },
+        })
+      }
       return response
     }
+
+    captureWorkerException({
+      ctx,
+      error: appResponse.error,
+      logger: appLogger,
+      distinctId: session?.user?.id,
+      properties: {
+        event: 'web.request.failed',
+        route: 'tanstack-start',
+        ...baseRequestFields,
+      },
+    })
 
     return responseFromCaughtError({
       event: 'web.request.failed',
