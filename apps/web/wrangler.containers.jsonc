@@ -117,6 +117,7 @@
     "SANDBOX_TRANSPORT": "rpc",
     "SANDBOX_LOG_LEVEL": "warn",
     "GARDEN_LOG_LEVEL": "warn",
+    "HELIX_URL": "http://localhost:6968",
   },
   "migrations": [
     {

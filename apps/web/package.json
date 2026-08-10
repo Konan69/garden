@@ -52,6 +52,7 @@
     "@executor-js/fumadb": "1.5.7",
     "@garden/agent-runtime": "workspace:*",
     "@garden/app-state": "workspace:*",
+    "@garden/brain": "workspace:*",
     "@garden/connectors": "workspace:*",
     "@garden/core": "workspace:*",
     "@garden/db": "workspace:*",

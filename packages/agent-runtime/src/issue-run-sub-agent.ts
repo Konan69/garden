@@ -365,6 +365,16 @@ export class IssueRunSubAgent extends Think<AgentRuntimeEnv> {
         loader: this.env.LOADER,
         getSandbox: () => this.getAgentSandbox(),
         issueRunEnv: this.env,
+        brain: {
+          ...(this.env.HELIX_URL === undefined
+            ? {}
+            : { helixUrl: this.env.HELIX_URL }),
+          ...(this.env.HELIX_API_KEY === undefined
+            ? {}
+            : { helixApiKey: this.env.HELIX_API_KEY }),
+          ai: this.env.AI,
+          files: this.env.FILES,
+        },
       }),
       update_plan: createUpdatePlanTool(context),
       post_comment: createPostCommentTool(context),

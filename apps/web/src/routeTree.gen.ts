@@ -57,6 +57,7 @@ import { Route as ApiConnectionsCallbackEventsRouteImport } from './routes/api/c
 import { Route as ApiConnectionsConnectorIdRouteImport } from './routes/api/connections/$connectorId'
 import { Route as ApiCommentsIdRouteImport } from './routes/api/comments/$id'
 import { Route as ApiChatThreadsRouteImport } from './routes/api/chat/threads'
+import { Route as ApiBrainFilesRouteImport } from './routes/api/brain/files'
 import { Route as ApiAutomationsIdRouteImport } from './routes/api/automations/$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAttachmentsIdRouteImport } from './routes/api/attachments/$id'
@@ -349,6 +350,11 @@ const ApiChatThreadsRoute = ApiChatThreadsRouteImport.update({
   path: '/api/chat/threads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBrainFilesRoute = ApiBrainFilesRouteImport.update({
+  id: '/api/brain/files',
+  path: '/api/brain/files',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAutomationsIdRoute = ApiAutomationsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -629,6 +635,7 @@ export interface FileRoutesByFullPath {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/automations/$id': typeof ApiAutomationsIdRouteWithChildren
+  '/api/brain/files': typeof ApiBrainFilesRoute
   '/api/chat/threads': typeof ApiChatThreadsRouteWithChildren
   '/api/comments/$id': typeof ApiCommentsIdRouteWithChildren
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
@@ -725,6 +732,7 @@ export interface FileRoutesByTo {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/automations/$id': typeof ApiAutomationsIdRouteWithChildren
+  '/api/brain/files': typeof ApiBrainFilesRoute
   '/api/chat/threads': typeof ApiChatThreadsRouteWithChildren
   '/api/comments/$id': typeof ApiCommentsIdRouteWithChildren
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
@@ -823,6 +831,7 @@ export interface FileRoutesById {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/automations/$id': typeof ApiAutomationsIdRouteWithChildren
+  '/api/brain/files': typeof ApiBrainFilesRoute
   '/api/chat/threads': typeof ApiChatThreadsRouteWithChildren
   '/api/comments/$id': typeof ApiCommentsIdRouteWithChildren
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
@@ -921,6 +930,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$id'
     | '/api/auth/$'
     | '/api/automations/$id'
+    | '/api/brain/files'
     | '/api/chat/threads'
     | '/api/comments/$id'
     | '/api/connections/$connectorId'
@@ -1017,6 +1027,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$id'
     | '/api/auth/$'
     | '/api/automations/$id'
+    | '/api/brain/files'
     | '/api/chat/threads'
     | '/api/comments/$id'
     | '/api/connections/$connectorId'
@@ -1114,6 +1125,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$id'
     | '/api/auth/$'
     | '/api/automations/$id'
+    | '/api/brain/files'
     | '/api/chat/threads'
     | '/api/comments/$id'
     | '/api/connections/$connectorId'
@@ -1207,6 +1219,7 @@ export interface RootRouteChildren {
   ApiWorkspacesRoute: typeof ApiWorkspacesRouteWithChildren
   ApiAttachmentsIdRoute: typeof ApiAttachmentsIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBrainFilesRoute: typeof ApiBrainFilesRoute
   ApiChatThreadsRoute: typeof ApiChatThreadsRouteWithChildren
   ApiCommentsIdRoute: typeof ApiCommentsIdRouteWithChildren
   ApiDevIssueRunPlanRoute: typeof ApiDevIssueRunPlanRoute
@@ -1566,6 +1579,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat/threads'
       fullPath: '/api/chat/threads'
       preLoaderRoute: typeof ApiChatThreadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/brain/files': {
+      id: '/api/brain/files'
+      path: '/api/brain/files'
+      fullPath: '/api/brain/files'
+      preLoaderRoute: typeof ApiBrainFilesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/automations/$id': {
@@ -2230,6 +2250,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWorkspacesRoute: ApiWorkspacesRouteWithChildren,
   ApiAttachmentsIdRoute: ApiAttachmentsIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBrainFilesRoute: ApiBrainFilesRoute,
   ApiChatThreadsRoute: ApiChatThreadsRouteWithChildren,
   ApiCommentsIdRoute: ApiCommentsIdRouteWithChildren,
   ApiDevIssueRunPlanRoute: ApiDevIssueRunPlanRoute,

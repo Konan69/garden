@@ -126,6 +126,8 @@ type AgentRuntimeEnv = Cloudflare.Env & {
   Sandbox: DurableObjectNamespace<SandboxDO>
   EXECUTOR_MCP_SESSION: DurableObjectNamespace<McpAgent>
   RUN_WORKFLOW: RunWorkflowBinding
+  HELIX_URL?: string
+  HELIX_API_KEY?: string
 }
 
 type AgentSessionStateItem = {
@@ -1201,6 +1203,16 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
       loader: this.env.LOADER,
       getSandbox: () => this.getAgentSandbox(),
       issueRunEnv: this.env,
+      brain: {
+        ...(this.env.HELIX_URL === undefined
+          ? {}
+          : { helixUrl: this.env.HELIX_URL }),
+        ...(this.env.HELIX_API_KEY === undefined
+          ? {}
+          : { helixApiKey: this.env.HELIX_API_KEY }),
+        ai: this.env.AI,
+        files: this.env.FILES,
+      },
       cancelIssueRun: async (input) => {
         const instance = await this.env.RUN_WORKFLOW.get(input.runId)
         await instance.sendEvent({

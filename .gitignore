@@ -31,3 +31,7 @@ refs/
 /task_plan.md
 /progress.md
 /findings.md
+
+# Local Org Brain HelixDB stack (never committed/pushed; prod uses VPS HelixDB)
+/infra/docker-compose.yaml
+/infra/data/

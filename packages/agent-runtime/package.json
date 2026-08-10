@@ -22,6 +22,7 @@
     "@cloudflare/shell": "catalog:",
     "@cloudflare/think": "catalog:",
     "@garden/app-state": "workspace:*",
+    "@garden/brain": "workspace:*",
     "@garden/connectors": "workspace:*",
     "@garden/core": "workspace:*",
     "@garden/db": "workspace:*",
