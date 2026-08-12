@@ -41,7 +41,6 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/src/routes/api/brain/-seed-session.test.ts',
     ],
   },
 })
