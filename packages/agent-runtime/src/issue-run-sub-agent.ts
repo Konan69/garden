@@ -114,6 +114,8 @@ type AgentRuntimeEnv = Cloudflare.Env & {
   Sandbox: DurableObjectNamespace<SandboxDO>
   MCP_SESSION: DurableObjectNamespace
   RUN_WORKFLOW: RunWorkflowBinding
+  HELIX_URL?: string
+  HELIX_API_KEY?: string
 }
 
 type TurnMode = 'start' | 'resume'
