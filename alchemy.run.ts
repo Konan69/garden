@@ -199,7 +199,12 @@ export const web = await TanStackStart(deployTarget.workerId, {
     DATABASE_URL: alchemy.secret.env.DATABASE_URL,
     BETTER_AUTH_SECRET: alchemy.secret.env.BETTER_AUTH_SECRET,
     RESEND_API_KEY: alchemy.secret.env.RESEND_API_KEY,
-    EXA_API_KEY: alchemy.secret.env.EXA_API_KEY,
+    // Cloudflare does not expose existing Worker secret values. Omitting EXA
+    // when the deploy environment lacks its plaintext value lets Workers retain
+    // the currently configured secret, while CI can still rotate it by setting
+    // EXA_API_KEY explicitly. Cloudflare documents that Worker secrets omitted
+    // from a deployment are preserved.
+    ...optionalSecretBindings(['EXA_API_KEY']),
     LOADER: WorkerLoader(),
     BROWSER: BrowserRendering(),
     AI: Ai(),
