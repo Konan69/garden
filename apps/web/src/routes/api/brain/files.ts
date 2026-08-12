@@ -10,6 +10,7 @@ import { Kind, WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import { formatOf } from '@garden/brain/services/extractor'
+import { createGardenLogger, errorFields } from '@garden/observability/logger'
 import { requireAppRequestContext, type AppRequestContext } from '@/lib/server/context'
 import { badRequest, requireWorkspaceContext } from '@/lib/server/control-plane'
 import type { AppEnv } from '@/lib/server/env'
@@ -17,6 +18,11 @@ import type { AppEnv } from '@/lib/server/env'
 class BrainFileUploadError extends TaggedError('BrainFileUploadError')<{
   message: string
 }>() {}
+
+const brainUploadLogger = createGardenLogger({
+  service: 'garden-staging',
+  component: 'brain-upload',
+})
 
 function brainStorageKey(input: {
   workspaceId: string
@@ -59,15 +65,6 @@ export const postBrainFileUpload = async ({
   if (formatOf(file.name) === null)
     return badRequest(`Unsupported file type: ${file.name}`)
 
-  const bytesResult = await Result.tryPromise({
-    try: async () => new Uint8Array(await file.arrayBuffer()),
-    catch: (cause) =>
-      new BrainFileUploadError({
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  })
-  if (bytesResult.isErr()) return badRequest(bytesResult.error.message)
-
   const itemId = crypto.randomUUID()
   const r2Key = brainStorageKey({
     workspaceId: workspaceContext.workspaceId,
@@ -78,7 +75,7 @@ export const postBrainFileUpload = async ({
 
   const putResult = await Result.tryPromise({
     try: async () =>
-      await appContext.env.FILES.put(r2Key, bytesResult.value, {
+      await appContext.env.FILES.put(r2Key, file.stream(), {
         httpMetadata: {
           contentType,
           contentDisposition: buildContentDisposition(
@@ -103,7 +100,14 @@ export const postBrainFileUpload = async ({
     return badRequest('Brain is not configured (missing HELIX_URL)')
   }
 
-  const brainEffect = Effect.gen(function* () {
+  const brainLive = makeWebBrainLive({
+    baseUrl: helixUrl,
+    apiKey: env.HELIX_API_KEY,
+    ai: env.AI,
+    files: env.FILES,
+  })
+
+  const addItemEffect = Effect.gen(function* () {
     const brain = yield* Brain
     const added = yield* brain.addItem({
       tenantId: WorkspaceId.make(workspaceContext.workspaceId),
@@ -127,25 +131,36 @@ export const postBrainFileUpload = async ({
         await env.FILES.delete(added.r2Key)
       }).pipe(Effect.ignore)
     }
-    yield* brain.ensureIndexes()
-    const indexed = yield* brain.index(added.id)
-    return indexed
-  }).pipe(
-    Effect.provide(
-      makeWebBrainLive({
-        baseUrl: helixUrl,
-        apiKey: env.HELIX_API_KEY,
-        ai: env.AI,
-        files: env.FILES,
-      }),
+    return added
+  }).pipe(Effect.provide(brainLive))
+
+  const addItemResult = await Effect.runPromise(Effect.result(addItemEffect))
+  if (EffectResult.isFailure(addItemResult)) {
+    return badRequest(addItemResult.failure.message)
+  }
+  const added = addItemResult.success
+
+  const waitUntil = appContext.waitUntil ?? (() => {})
+  waitUntil(
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const brain = yield* Brain
+        yield* brain.ensureIndexes()
+        return yield* brain.index(added.id)
+      }).pipe(
+        Effect.provide(brainLive),
+        Effect.catch((failure) => {
+          brainUploadLogger.error('brain file deferred indexing failed', {
+            itemId: added.id,
+            ...errorFields(failure),
+          })
+          return Effect.succeed(null)
+        }),
+      ),
     ),
   )
 
-  const result = await Effect.runPromise(Effect.result(brainEffect))
-  if (EffectResult.isFailure(result)) {
-    return badRequest(result.failure.message)
-  }
-  return Response.json({ item: result.success }, { status: 201 })
+  return Response.json({ item: added }, { status: 201 })
 }
 
 export const Route = createFileRoute('/api/brain/files')({
