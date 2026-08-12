@@ -16,7 +16,6 @@ export abstract class BrainError<
   abstract readonly _tag: TTag
 }
 
-/** Marks a failed HelixDB request. */
 export class HelixError extends BrainError<'HelixError'> {
   readonly _tag = 'HelixError' as const
   readonly status?: number
@@ -26,17 +25,14 @@ export class HelixError extends BrainError<'HelixError'> {
   }
 }
 
-/** Marks a concurrent-write conflict that can be retried. */
 export class WriteConflict extends BrainError<'WriteConflict'> {
   readonly _tag = 'WriteConflict' as const
 }
 
-/** Marks a failure while embedding text. */
 export class EmbedError extends BrainError<'EmbedError'> {
   readonly _tag = 'EmbedError' as const
 }
 
-/** Marks a failure while extracting text from a source file. */
 export class ExtractError extends BrainError<'ExtractError'> {
   readonly _tag = 'ExtractError' as const
 }

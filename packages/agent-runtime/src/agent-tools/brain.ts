@@ -8,32 +8,13 @@ import { makeWorkerBrainLive } from '@garden/brain/services/worker'
 import type { WorkersAiBinding } from '@garden/brain/services/embeddings'
 import type { R2BucketLike } from '@garden/brain/services/raw-file-store'
 
-/**
- * First-party Org Brain tools for the agent runtimes.
- *
- * Before this module the brain was only reachable through the test harness;
- * agents had no way to search durable workspace knowledge or persist what they
- * learned mid-run. Exposing the `Brain` service here gives chat, issue runs,
- * and automations the same surface, hitting Helix over plain fetch from the
- * Worker via `makeWorkerBrainLive` (Workers AI embeddings, R2-backed file store,
- * no Node FS / no onnx bundle). Modelled on `web.ts` — AI SDK `tool()` + zod +
- * `better-result`, with the Effect runtime bridged at the tool boundary.
- */
-
-/**
- * Per-run identity resolved at call time. Chat resolves it from the thread,
- * issue runs from `currentRunState`, automations from `currentLogContext`.
- */
 export type BrainToolContext = {
   readonly workspaceId: string
   readonly agentId: string
   readonly runId: string
 }
 
-/** Caps fan-out on a search; more than a handful of hits just dilutes. */
 const MAX_SEARCH_K = 8
-
-/** Search bodies are for reading, not context-window filling. */
 const MAX_HIT_BODY_CHARS = 4_000
 
 const brainSearchInputSchema = z
@@ -103,12 +84,6 @@ const toHit = (raw: {
   ...(raw.cite === undefined ? {} : { cite: raw.cite }),
 })
 
-/**
- * Builds the brain tool surface. `env` carries the Helix connection; `ai` and
- * `files` back the worker-safe `Brain` composition; `getContext` resolves the
- * tenant and acting agent per call. When `HELIX_URL` is absent the tools report
- * an unconfigured error to the model instead of failing the turn.
- */
 export function createBrainTools(deps: {
   env: { HELIX_URL?: string; HELIX_API_KEY?: string }
   ai: WorkersAiBinding

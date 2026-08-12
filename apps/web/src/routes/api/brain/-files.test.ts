@@ -83,12 +83,6 @@ function fakeContext(env: Record<string, unknown>): { context: unknown } {
   }
 }
 
-async function drainWaitUntil(context: unknown) {
-  const deferred = (context as { env: Record<string, unknown>; deferred?: unknown })
-    .deferred
-  // unreachable via typed path below; handled in upload()
-}
-
 async function upload(filename: string, type: string, bytes?: Uint8Array, workspaceId?: string) {
   const content = bytes ?? (await readFile(resolve(FIXTURES, filename)))
   const form = new FormData()
