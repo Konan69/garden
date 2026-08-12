@@ -41,8 +41,10 @@ assert.equal(deploymentTargets.preview.emptyBucketsOnDestroy, true)
 assert.equal(deploymentTargets.preview.databaseUrlEnv, 'DATABASE_URL')
 assert.equal(deploymentTargets.preview.bindConfiguredBetterAuthUrl, false)
 
+assert.match(publicWranglerSources[0], /"name": "garden-staging"/)
+assert.match(publicWranglerSources[1], /"name": "garden-local"/)
+
 for (const source of publicWranglerSources) {
-  assert.match(source, /"name": "garden-local"/)
   assert.match(source, /"id": "0{32}"/)
   assert.match(source, /"database_id": "00000000-0000-0000-0000-000000000000"/)
   assert.equal(
