@@ -11,8 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as RoadmapRouteImport } from './routes/roadmap'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HarnessyRouteImport } from './routes/harnessy'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as ArchitectureRouteImport } from './routes/architecture'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
@@ -113,6 +115,11 @@ const RoadmapRoute = RoadmapRouteImport.update({
   path: '/roadmap',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -121,6 +128,11 @@ const LoginRoute = LoginRouteImport.update({
 const HarnessyRoute = HarnessyRouteImport.update({
   id: '/harnessy',
   path: '/harnessy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeaturesRoute = FeaturesRouteImport.update({
@@ -593,8 +605,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/architecture': typeof ArchitectureRoute
   '/features': typeof FeaturesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
@@ -687,8 +701,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/architecture': typeof ArchitectureRoute
   '/features': typeof FeaturesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
@@ -783,8 +799,10 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/architecture': typeof ArchitectureRoute
   '/features': typeof FeaturesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
@@ -879,8 +897,10 @@ export interface FileRouteTypes {
     | '/'
     | '/architecture'
     | '/features'
+    | '/forgot-password'
     | '/harnessy'
     | '/login'
+    | '/reset-password'
     | '/roadmap'
     | '/signup'
     | '/workspace'
@@ -973,8 +993,10 @@ export interface FileRouteTypes {
     | '/'
     | '/architecture'
     | '/features'
+    | '/forgot-password'
     | '/harnessy'
     | '/login'
+    | '/reset-password'
     | '/roadmap'
     | '/signup'
     | '/workspace'
@@ -1068,8 +1090,10 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/architecture'
     | '/features'
+    | '/forgot-password'
     | '/harnessy'
     | '/login'
+    | '/reset-password'
     | '/roadmap'
     | '/signup'
     | '/_authenticated/workspace'
@@ -1164,8 +1188,10 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   ArchitectureRoute: typeof ArchitectureRoute
   FeaturesRoute: typeof FeaturesRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   HarnessyRoute: typeof HarnessyRoute
   LoginRoute: typeof LoginRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   RoadmapRoute: typeof RoadmapRoute
   SignupRoute: typeof SignupRoute
   ApiSplatRoute: typeof ApiSplatRoute
@@ -1220,6 +1246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoadmapRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -1232,6 +1265,13 @@ declare module '@tanstack/react-router' {
       path: '/harnessy'
       fullPath: '/harnessy'
       preLoaderRoute: typeof HarnessyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/features': {
@@ -2171,8 +2211,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   ArchitectureRoute: ArchitectureRoute,
   FeaturesRoute: FeaturesRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   HarnessyRoute: HarnessyRoute,
   LoginRoute: LoginRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   RoadmapRoute: RoadmapRoute,
   SignupRoute: SignupRoute,
   ApiSplatRoute: ApiSplatRoute,

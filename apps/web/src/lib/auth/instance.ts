@@ -39,6 +39,7 @@ import {
   capturePostHogHandledErrorWithScheduler,
 } from '@/lib/posthog-server'
 import type { Db } from '@/lib/server/db'
+import { sendPasswordResetEmail } from '@/lib/server/email/password-reset'
 
 export type GardenAuthEnv = Pick<
   AppEnv,
@@ -418,6 +419,18 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
     },
     emailAndPassword: {
       enabled: true,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user: resetUser, url }) => {
+        await sendPasswordResetEmail({
+          env,
+          resetUrl: url,
+          user: {
+            id: resetUser.id,
+            email: resetUser.email,
+            name: resetUser.name,
+          },
+        })
+      },
     },
     account: {
       encryptOAuthTokens: true,

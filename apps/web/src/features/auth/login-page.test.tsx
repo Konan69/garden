@@ -124,6 +124,20 @@ describe('LoginPage', () => {
     expect(passwordInput).toHaveAttribute('type', 'password')
   })
 
+  it('links to password recovery with the entered email', async () => {
+    const user = userEvent.setup()
+    renderLoginPage()
+
+    await user.type(screen.getByLabelText(/email/i), 'ada+garden@example.com')
+
+    expect(
+      screen.getByRole('link', { name: /forgot password/i }),
+    ).toHaveAttribute(
+      'href',
+      '/forgot-password?email=ada%2Bgarden%40example.com',
+    )
+  })
+
   it('shows the auth error when Better Auth rejects the request', async () => {
     const user = userEvent.setup()
     const { onSuccess } = renderLoginPage()

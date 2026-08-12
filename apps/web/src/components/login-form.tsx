@@ -122,7 +122,21 @@ export function LoginForm({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <div className="flex items-center justify-between gap-3">
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  {!isSignup ? (
+                    <a
+                      href={
+                        email.trim()
+                          ? `/forgot-password?email=${encodeURIComponent(email.trim())}`
+                          : '/forgot-password'
+                      }
+                      className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline hover:underline-offset-4"
+                    >
+                      Forgot password?
+                    </a>
+                  ) : null}
+                </div>
                 <div className="relative">
                   <Input
                     id="password"
