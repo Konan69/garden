@@ -30,7 +30,13 @@ if (offline) {
   process.env.GARDEN_OFFLINE ??= '1'
   // Matches the compose.dev.yaml postgres service (`pnpm offline:up`). Set
   // before the Hyperdrive mapping below so the local connection string
-  // inherits it. An explicit DATABASE_URL (shell or root .env) always wins.
+  // inherits it. An explicit DATABASE_URL (shell or root .env) always wins —
+  // except the legacy .env.example placeholder (host literally named "host"),
+  // which a fresh `cp .env.example .env` used to install and which can never
+  // connect; treat it as unset so offline setup works out of the box.
+  if (process.env.DATABASE_URL?.includes('@host:5432/')) {
+    delete process.env.DATABASE_URL
+  }
   process.env.DATABASE_URL ??=
     'postgresql://garden:garden@localhost:55432/garden'
 }
