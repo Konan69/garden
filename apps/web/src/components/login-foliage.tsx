@@ -4,9 +4,9 @@
  * Why: the login redesign (Aug 2026) replaces the old two-column marketing
  * card with Garden's own visual language — parchment ground, vellum panel,
  * and this hand-drawn bed of moss-ink stems rising from the viewport bottom.
- * Several stems bloom into the app's 8-pointed asterisk mark (see
- * packages/ui/components/common/brand-icon.tsx) so the garden literally grows
- * the brand.
+ * Several stems carry small 8-pointed star flowers — an echo of Garden's
+ * original asterisk mark (the brand mark itself is now the leaf in
+ * packages/ui/components/common/brand-icon.tsx).
  *
  * Composition note: the auth panel is ~24rem wide and centered, covering
  * roughly x 400–800 in this 1200-unit viewBox. The vellum surface is nearly

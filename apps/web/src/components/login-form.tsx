@@ -9,7 +9,7 @@ import {
   FieldLabel,
 } from '@garden/ui/components/ui/field'
 import { Input } from '@garden/ui/components/ui/input'
-import { LeafMark } from '@/components/leaf-mark'
+import { BrandIcon } from '@garden/ui/components/common/brand-icon'
 import { EyeIcon, EyeOffIcon, Loader2Icon } from 'lucide-react'
 
 /**
@@ -74,7 +74,7 @@ export function LoginForm({
       <div className="login-panel-enter vellum-heavy rounded-t-[7rem] rounded-b-2xl px-7 pt-14 pb-8 shadow-(--shadow-float-2) sm:px-9">
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="inline-flex size-12 items-center justify-center rounded-full bg-brand/10 text-brand">
-            <LeafMark className="size-6" />
+            <BrandIcon className="size-6" animate noSpin />
           </span>
           <h1 className="font-prose text-[1.65rem] leading-tight font-semibold tracking-tight">
             {title}
