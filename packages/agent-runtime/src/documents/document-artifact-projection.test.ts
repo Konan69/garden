@@ -6,6 +6,7 @@ import {
   documentArtifactProjectionLayer,
   documentBlocksToText,
   htmlToDocumentBlocks,
+  makeMammothDocumentMarkdownLayer,
   makeWorkersAiDocumentMarkdownLayer,
   sanitizeDocumentBlockHtml,
 } from './document-artifact-projection'
@@ -193,5 +194,58 @@ describe('DocumentArtifactProjection', () => {
       filename: 'broken.docx',
       message: 'Could not import broken.docx into editable blocks.',
     })
+  })
+})
+
+describe('makeMammothDocumentMarkdownLayer', () => {
+  const mammothProjectionLayer = documentArtifactProjectionLayer.pipe(
+    Layer.provide(makeMammothDocumentMarkdownLayer()),
+  )
+
+  it('imports a real DOCX into sanitized blocks without the AI binding', async () => {
+    const { Document, HeadingLevel, Packer, Paragraph, TextRun } = await import(
+      'docx'
+    )
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              text: 'Launch plan',
+              heading: HeadingLevel.HEADING_1,
+            }),
+            new Paragraph({ children: [new TextRun('Owner: Ada')] }),
+          ],
+        },
+      ],
+    })
+    const bytes = new Uint8Array(await Packer.toBuffer(doc))
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const projection = yield* DocumentArtifactProjection
+        return yield* projection.importDocx('Launch plan.docx', bytes)
+      }).pipe(Effect.provide(mammothProjectionLayer)),
+    )
+
+    expect(result.title).toBe('Launch plan')
+    const text = documentBlocksToText(result.blocks)
+    expect(text).toContain('Launch plan')
+    expect(text).toContain('Owner: Ada')
+  })
+
+  it('fails with the typed import error on corrupt bytes', async () => {
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const projection = yield* DocumentArtifactProjection
+        return yield* projection.importDocx(
+          'corrupt.docx',
+          Uint8Array.from([1, 2, 3, 4]),
+        )
+      }).pipe(Effect.provide(mammothProjectionLayer), Effect.flip),
+    )
+
+    expect(failure._tag).toBe('DocumentArtifactImportError')
+    expect(failure.filename).toBe('corrupt.docx')
   })
 })

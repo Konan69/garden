@@ -364,11 +364,23 @@ export interface DocumentMarkdownAi {
   ) => Promise<DocumentMarkdownConversionResponse>
 }
 
+/**
+ * Converter output is tagged with its markup format so the projection layer
+ * knows whether `marked` must run. Workers AI yields Markdown; the offline
+ * mammoth fallback is HTML-native, and converting its HTML to Markdown and
+ * back would add a dependency and lose fidelity — the downstream structural
+ * sanitizer remains the single authority over stored markup either way.
+ */
+export type DocumentMarkdownConversion = {
+  readonly format: 'markdown' | 'html'
+  readonly data: string
+}
+
 export interface DocumentMarkdownConverterService {
   readonly convertDocx: (
     filename: string,
     bytes: Uint8Array,
-  ) => Effect.Effect<string, DocumentArtifactImportError>
+  ) => Effect.Effect<DocumentMarkdownConversion, DocumentArtifactImportError>
 }
 
 /** Owns the external Workers AI conversion boundary used by projections. */
@@ -419,11 +431,59 @@ export const makeWorkersAiDocumentMarkdownLayer = (ai: DocumentMarkdownAi) =>
               cause: new Error(result.error),
             })
           }
-          return result.data
+          return { format: 'markdown', data: result.data } as const
         },
       ),
     }),
   )
+
+/**
+ * Offline/local DOCX converter: mammoth (already a dependency, same dynamic
+ * import precedent as document-tools.ts extractDocumentText). Exists because
+ * offline mode (`GARDEN_OFFLINE=1`, no Cloudflare account) must never invoke
+ * the Workers AI binding — with remote bindings disabled it throws on use.
+ * Mammoth emits HTML, surfaced as `format: 'html'` so the projection skips
+ * `marked` and feeds the sanitizer directly.
+ */
+export const makeMammothDocumentMarkdownLayer = () =>
+  Layer.succeed(
+    DocumentMarkdownConverter,
+    DocumentMarkdownConverter.of({
+      convertDocx: Effect.fn('DocumentMarkdownConverter.convertDocx')(
+        function* (filename: string, bytes: Uint8Array) {
+          const html = yield* Effect.tryPromise({
+            try: async () => {
+              const mammoth = await import('mammoth')
+              const result = await mammoth.convertToHtml({
+                buffer: Buffer.from(bytes),
+              })
+              return result.value
+            },
+            catch: (cause) =>
+              new DocumentArtifactImportError({
+                filename,
+                message: `Could not import ${filename} into editable blocks.`,
+                cause,
+              }),
+          })
+          return { format: 'html', data: html } as const
+        },
+      ),
+    }),
+  )
+
+/**
+ * Selects the DOCX converter for the current environment: Workers AI normally,
+ * mammoth when offline mode is active (the AI binding would throw if invoked
+ * with remote bindings disabled — see makeMammothDocumentMarkdownLayer).
+ */
+export const documentMarkdownLayerForEnv = (env: {
+  GARDEN_OFFLINE?: string
+  AI: DocumentMarkdownAi
+}) =>
+  env.GARDEN_OFFLINE === '1'
+    ? makeMammothDocumentMarkdownLayer()
+    : makeWorkersAiDocumentMarkdownLayer(env.AI)
 
 export interface DocumentArtifactProjectionService {
   readonly importDocx: (
@@ -452,8 +512,11 @@ export const documentArtifactProjectionLayer = Layer.effect(
         filename: string,
         bytes: Uint8Array,
       ) {
-        const markdown = yield* converter.convertDocx(filename, bytes)
-        const html = marked.parse(markdown, { async: false })
+        const conversion = yield* converter.convertDocx(filename, bytes)
+        const html =
+          conversion.format === 'html'
+            ? conversion.data
+            : marked.parse(conversion.data, { async: false })
         const title =
           filename
             .replace(/\.docx$/i, '')

@@ -42,6 +42,12 @@
       "interactive": true,
       "interruptible": true
     },
+    "dev:offline": {
+      "cache": false,
+      "persistent": true,
+      "interactive": true,
+      "interruptible": true
+    },
     "typecheck": {
       "dependsOn": ["transit"]
     },

@@ -10,6 +10,10 @@
   "scripts": {
     "dev": "turbo run dev:local --ui=tui --filter=@garden/web",
     "dev:local": "turbo run dev:local --ui=tui --filter=@garden/web",
+    "dev:offline": "turbo run dev:offline --ui=tui --filter=@garden/web",
+    "offline:up": "docker compose -f compose.dev.yaml up -d --wait",
+    "offline:up:ollama": "docker compose -f compose.dev.yaml --profile ollama up -d --wait",
+    "offline:down": "docker compose -f compose.dev.yaml --profile ollama down",
     "dev:containers": "turbo run dev --ui=tui --filter=@garden/web",
     "dev:reset": "pkill -f '[t]urbo run dev|[t]urbo run dev:local|[v]ite dev|[w]orkerd serve|[e]sbuild --service' || true",
     "dev:web": "turbo run dev:local --ui=tui --filter=@garden/web",
