@@ -128,10 +128,15 @@ const OPENAI_COMPATIBLE_DEFAULT_CONTEXT_WINDOW_TOKENS = 32_768
  */
 export function resolveAgentModelProfile(env?: AgentModelEnv): AgentModelProfile {
   const requested = env?.GARDEN_MODEL_PROVIDER?.trim()
+  // Empty string means "unset": the wrangler `vars` block declares these keys
+  // with "" defaults so process env can override them in local dev (wrangler
+  // only forwards declared keys). Any non-empty GARDEN_OFFLINE enables
+  // offline mode.
+  const offline = (env?.GARDEN_OFFLINE ?? '').trim() !== ''
   const provider: AgentModelProvider =
     requested === 'openai-compatible' || requested === 'workers-ai'
       ? requested
-      : env?.GARDEN_OFFLINE === '1'
+      : offline
         ? 'openai-compatible'
         : 'workers-ai'
   if (provider === 'workers-ai') return DEFAULT_AGENT_MODEL_PROFILE

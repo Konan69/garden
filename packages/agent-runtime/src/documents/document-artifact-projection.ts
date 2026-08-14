@@ -481,7 +481,8 @@ export const documentMarkdownLayerForEnv = (env: {
   GARDEN_OFFLINE?: string
   AI: DocumentMarkdownAi
 }) =>
-  env.GARDEN_OFFLINE === '1'
+  // Non-empty GARDEN_OFFLINE = offline (wrangler vars default it to "").
+  (env.GARDEN_OFFLINE ?? '').trim() !== ''
     ? makeMammothDocumentMarkdownLayer()
     : makeWorkersAiDocumentMarkdownLayer(env.AI)
 
