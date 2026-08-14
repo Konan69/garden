@@ -575,7 +575,7 @@
  * fully static under prefers-reduced-motion.
  * ========================================================================== */
 .foliage-stem {
-  stroke: currentColor;
+  stroke: currentcolor;
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-dasharray: 1;
@@ -585,9 +585,9 @@
 }
 
 .foliage-leaf {
-  fill: currentColor;
+  fill: currentcolor;
   fill-opacity: 0.12;
-  stroke: currentColor;
+  stroke: currentcolor;
   stroke-width: 1;
   stroke-opacity: 0.35;
   opacity: 0;
@@ -595,7 +595,7 @@
 }
 
 .foliage-bloom {
-  stroke: currentColor;
+  stroke: currentcolor;
   stroke-width: 1.4;
   stroke-linecap: round;
   opacity: 0;

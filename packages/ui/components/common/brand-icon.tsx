@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '../../lib/utils'
 
 interface BrandIconProps extends React.ComponentProps<'span'> {
@@ -28,7 +28,12 @@ const borderedSizes = {
  * call sites keep working: `animate` plays a one-time "sprout" entrance
  * (scale/rotate settle — see .animate-entrance-sprout in base.css), and
  * `noSpin` retains its historical meaning of "no hover motion" (the hover
- * effect is now a gentle tilt rather than a spin).
+ * effect is now a gentle tilt rather than a spin, gated by motion-safe).
+ *
+ * Entrance state transitions on the animation's own `animationend` event —
+ * an event handler, not an effect (repo rule: no useEffect). Under
+ * prefers-reduced-motion the entrance never plays and the class is inert,
+ * so the mark renders statically.
  */
 export function BrandIcon({
   className,
@@ -40,12 +45,6 @@ export function BrandIcon({
 }: BrandIconProps) {
   const [entranceDone, setEntranceDone] = useState(!animate)
 
-  useEffect(() => {
-    if (!animate) return
-    const timer = setTimeout(() => setEntranceDone(true), 700)
-    return () => clearTimeout(timer)
-  }, [animate])
-
   const leaf = (iconClassName: string) => (
     <svg
       className={cn(
@@ -53,8 +52,9 @@ export function BrandIcon({
         !entranceDone && 'animate-entrance-sprout',
         entranceDone &&
           !noSpin &&
-          'transition-transform duration-300 hover:-rotate-6',
+          'motion-safe:transition-transform motion-safe:duration-300 motion-safe:hover:-rotate-6',
       )}
+      onAnimationEnd={() => setEntranceDone(true)}
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
