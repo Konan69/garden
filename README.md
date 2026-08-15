@@ -32,19 +32,23 @@ skills, and keep technical work tied to shared tasks.
 
 ## Run Garden locally
 
-The normal development setup keeps the web app and Cloudflare's local D1, R2,
-Durable Object, and Workflow simulators on your machine. It connects to your
-Postgres database and uses Cloudflare's remote Workers AI binding. Docker is
-not required to start this mode.
+Garden runs locally in two modes. **Standard mode** (`pnpm dev`) keeps the web
+app and Cloudflare's local D1, R2, Durable Object, and Workflow simulators on
+your machine and uses Cloudflare's remote Workers AI binding for the model —
+it needs a Cloudflare account. **Offline mode** (`pnpm dev:offline`) needs no
+Cloudflare account at all: model calls go to Ollama (or any OpenAI-compatible
+endpoint) — see [Offline mode](#offline-mode-no-cloudflare-account).
+
+Both modes use the dockerized local Postgres from `pnpm offline:up` as the
+recommended database: a fresh, private instance that migrations can own.
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 22.12 or newer
 - pnpm 10.33.0; Corepack is the simplest way to install the pinned version
-- A Postgres database; [Neon](https://neon.tech) is the setup used by the
-  runtime
-- A Cloudflare account for Workers AI
-- Docker only when running the full test suite or Sandbox-container mode
+- Docker, for the local Postgres (also used by the full test suite and
+  Sandbox-container mode)
+- A Cloudflare account for Workers AI — standard mode only
 
 ### 1. Clone and install
 
@@ -81,7 +85,7 @@ Fill in these required values in the root `.env` file:
 | Variable                | What to use                                                   |
 | ----------------------- | ------------------------------------------------------------- |
 | `CLOUDFLARE_ACCOUNT_ID` | Account ID from `wrangler whoami`                              |
-| `DATABASE_URL`          | Connection string for a dedicated Postgres database           |
+| `DATABASE_URL`          | `postgresql://garden:garden@localhost:55432/garden` for the local Docker Postgres (`pnpm offline:up`); any dedicated Postgres (e.g. [Neon](https://neon.tech)) also works |
 | `BETTER_AUTH_SECRET`    | A high-entropy secret of at least 32 characters                |
 | `EXECUTOR_SECRET_KEY`   | A second, separate high-entropy secret for connector execution |
 
@@ -99,6 +103,7 @@ providers you choose to configure.
 ### 4. Migrate and start
 
 ```bash
+pnpm offline:up                        # local Postgres (skip if you use your own)
 pnpm --filter @garden/db db:migrate
 pnpm dev
 ```
@@ -135,6 +140,48 @@ tests use Testcontainers and pull `postgres:16-alpine` on the first run.
 **Port 3000 is already in use:** stop the process that owns the port. The
 `pnpm dev:reset` helper uses broad process-name matching on macOS and Linux and
 may stop unrelated Vite, Workerd, or esbuild processes, so use it deliberately.
+
+### Offline mode (no Cloudflare account)
+
+`pnpm dev:offline` runs the entire product with zero Cloudflare setup: no
+account, no `wrangler login`, no workers.dev subdomain, no
+`CLOUDFLARE_ACCOUNT_ID`. Remote bindings are disabled, so the Workers AI
+binding is never contacted — model calls go to an OpenAI-compatible endpoint
+instead (Ollama by default).
+
+```bash
+cp .env.example .env         # fill in BETTER_AUTH_SECRET and EXECUTOR_SECRET_KEY only
+pnpm offline:up:ollama       # local Postgres + Ollama (or `pnpm offline:up` if Ollama runs natively)
+docker compose -f compose.dev.yaml exec ollama ollama pull qwen3:8b
+pnpm --filter @garden/db db:migrate
+pnpm dev:offline
+```
+
+Then open [http://localhost:3000](http://localhost:3000) and sign up. The
+model endpoint is configurable — any OpenAI-compatible API works, including
+hosted ones when you want stronger models without a Cloudflare account:
+
+| Variable                            | Default                        | Notes                                   |
+| ----------------------------------- | ------------------------------ | --------------------------------------- |
+| `GARDEN_MODEL_BASE_URL`             | `http://localhost:11434/v1`    | Ollama; or e.g. `https://openrouter.ai/api/v1` |
+| `GARDEN_MODEL_ID`                   | `qwen3:8b`                     | Must support tool calling               |
+| `GARDEN_MODEL_API_KEY`              | unset                          | Required by hosted endpoints            |
+| `GARDEN_MODEL_CONTEXT_WINDOW_TOKENS`| `32768`                        | Sizes context compaction                |
+
+Offline limitations:
+
+- DOCX import uses a local converter (mammoth) instead of Workers AI document
+  conversion — fidelity is slightly reduced.
+- Agent quality tracks the model you point at; small local models may fumble
+  tool calls. A hosted endpoint fixes this without any Cloudflare setup.
+- Automation browser runs are untested offline.
+
+Offline troubleshooting:
+
+- **Model calls fail:** check `curl http://localhost:11434/v1/models` answers
+  and the model is pulled (`ollama list`).
+- **Postgres port conflict:** compose maps 55432 to avoid a system Postgres on
+  5432; override `DATABASE_URL` if 55432 is taken.
 
 ### Sandbox-container mode
 

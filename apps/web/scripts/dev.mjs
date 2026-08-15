@@ -14,11 +14,32 @@ for (const [key, value] of Object.entries(rootEnv)) {
 }
 
 process.env.NODE_OPTIONS ??= '--max-old-space-size=3072'
+const offline = args.has('--offline')
 const configSelection = selectWorkerConfig({
   containers: args.has('--containers'),
 })
 process.env.CLOUDFLARE_WORKER_CONFIG_PATH ??= configSelection.path
-process.env.CLOUDFLARE_VITE_REMOTE_BINDINGS = '1'
+// Offline mode (`pnpm dev:offline`) disables remote bindings entirely: the
+// vite plugin then never opens a Cloudflare session, so no account, wrangler
+// login, or workers.dev subdomain is needed. The wrangler config is untouched
+// — the AI binding's `"remote": true` is inert with remote bindings off, and
+// the runtime routes model calls to an OpenAI-compatible endpoint instead
+// (GARDEN_OFFLINE → packages/agent-runtime/src/model.ts).
+process.env.CLOUDFLARE_VITE_REMOTE_BINDINGS = offline ? '0' : '1'
+if (offline) {
+  process.env.GARDEN_OFFLINE ??= '1'
+  // Matches the compose.dev.yaml postgres service (`pnpm offline:up`). Set
+  // before the Hyperdrive mapping below so the local connection string
+  // inherits it. An explicit DATABASE_URL (shell or root .env) always wins —
+  // except the legacy .env.example placeholder (host literally named "host"),
+  // which a fresh `cp .env.example .env` used to install and which can never
+  // connect; treat it as unset so offline setup works out of the box.
+  if (process.env.DATABASE_URL?.includes('@host:5432/')) {
+    delete process.env.DATABASE_URL
+  }
+  process.env.DATABASE_URL ??=
+    'postgresql://garden:garden@localhost:55432/garden'
+}
 if (!args.has('--containers')) {
   process.env.ENVIRONMENT = 'development'
 }

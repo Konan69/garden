@@ -45,7 +45,11 @@ import {
   type AgentPermissions,
 } from '@garden/core/agents/permissions'
 import * as schema from '@garden/db/schema'
-import { createAgentModel } from './model'
+import {
+  type AgentModelEnv,
+  createAgentModel,
+  resolveAgentModelProfile,
+} from './model'
 import { AiObservation } from './ai-observation'
 import {
   classifyGardenContextOverflow,
@@ -78,7 +82,8 @@ import {
   type RunWorkflowTurnStartResult,
 } from './run-workflow'
 
-type AgentRuntimeEnv = Cloudflare.Env & {
+type AgentRuntimeEnv = Cloudflare.Env &
+  AgentModelEnv & {
   BETTER_AUTH_SECRET: string
   BETTER_AUTH_URL: string
   HYPERDRIVE: Hyperdrive
@@ -281,7 +286,12 @@ export class AutomationRunSubAgent extends Think<AgentRuntimeEnv> {
   }
 
   override chatRecovery = true
-  override contextOverflow = createGardenContextOverflow()
+  override contextOverflow = createGardenContextOverflow(
+    // Field initializers run after super(), so this.env is populated: offline
+    // local models need overflow bounds scaled to their context window, not
+    // the 262k Workers AI default.
+    resolveAgentModelProfile(this.env),
+  )
   override classifyChatError = classifyGardenContextOverflow
 
   waitForMcpConnections = {
@@ -331,7 +341,11 @@ export class AutomationRunSubAgent extends Think<AgentRuntimeEnv> {
   }
 
   override async configureSession(session: Session) {
-    return configureThinkCompaction(session, this.getModel())
+    return configureThinkCompaction(
+      session,
+      this.getModel(),
+      resolveAgentModelProfile(this.env),
+    )
       .withContext('foundation', {
         description:
           'Base Garden operating contract. Later context refines this but does not override it.',
