@@ -17,6 +17,7 @@ import {
 } from '@/lib/server/context'
 import { badRequest, requireWorkspaceContext } from '@/lib/server/control-plane'
 import type { AppEnv } from '@/lib/server/env'
+import { runDeferredBrainIndexAndAudit } from '@/lib/server/brain-file-ingestion'
 
 class BrainFileUploadError extends TaggedError('BrainFileUploadError')<{
   message: string
@@ -70,8 +71,11 @@ async function discardStagedUpload(
 /**
  * Handles the Brain file server route. The handler writes R2 first, then either
  * adopts that key through Brain or removes it on configuration/write failure;
- * canonical duplicates retain the existing active object and discard the new key.
- * TanStack Start server-route and better-result boundary guidance were consulted.
+ * canonical duplicates retain the existing active object and discard the new
+ * key. Before the deferred task ended after mechanical indexing; after it
+ * succeeds, the task calls the workspace AgentDO's ephemeral audit facet with
+ * the extracted body. TanStack Start server-route, Agents SDK callable RPC,
+ * Think `saveMessages`, and better-result boundary guidance were consulted.
  */
 export const postBrainFileUpload = async ({
   context,
@@ -172,25 +176,20 @@ export const postBrainFileUpload = async ({
 
   const waitUntil = appContext.waitUntil ?? (() => {})
   waitUntil(
-    Effect.runPromise(
-      Effect.gen(function* () {
+    runDeferredBrainIndexAndAudit({
+      env,
+      indexEffect: Effect.gen(function* () {
         const brain = yield* Brain
         yield* brain.ensureIndexes()
         return yield* brain.index(
           added.id,
           WorkspaceId.make(workspaceContext.workspaceId),
         )
-      }).pipe(
-        Effect.provide(brainLive),
-        Effect.catch((failure) => {
-          brainUploadLogger.error('brain file deferred indexing failed', {
-            itemId: added.id,
-            ...errorFields(failure),
-          })
-          return Effect.succeed(null)
-        }),
-      ),
-    ),
+      }).pipe(Effect.provide(brainLive)),
+      itemId: added.id,
+      ownerUserId: workspaceContext.session.user.id,
+      workspaceId: workspaceContext.workspaceId,
+    }),
   )
 
   return Response.json({ item: added }, { status: 201 })
