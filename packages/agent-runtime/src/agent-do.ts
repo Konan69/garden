@@ -5,9 +5,11 @@
 // name; migrated chat agents can keep their saved `agent.host_name` so their
 // Durable Object storage remains addressable. Inside, `ChatSubAgent` facets
 // are keyed by threadId, `IssueRunSubAgent` facets by issueId, and
-// `AutomationRunSubAgent` facets by automation run id. Per-agent
-// personality (name, role, skills, instructions, runtimeConfig, permissions)
-// comes from `agent` rows in Postgres.
+// `AutomationRunSubAgent` facets by automation run id. Ephemeral
+// `BrainAuditSubAgent` facets are keyed by indexed item id and reclaimed after
+// one programmatic turn. Per-agent personality (name, role, skills,
+// instructions, runtimeConfig, permissions) comes from `agent` rows in
+// Postgres.
 //
 // Future moves still to land:
 //   - Workspace-level WS hoist: open one WS per host at WorkspaceLayout mount,
@@ -103,6 +105,8 @@ import {
 import { makeDocumentArtifactDurableRepositoryLayer } from './documents/document-artifact-repository'
 import { IssueRunSubAgent } from './issue-run-sub-agent'
 import { AutomationRunSubAgent } from './automation-run-sub-agent'
+import { BrainAuditSubAgent } from './brain-audit-sub-agent'
+import type { BrainAuditRunInput } from './brain-audit'
 import {
   RunWorkflowCreateError,
   type RunWorkflowBinding,
@@ -715,6 +719,63 @@ export class AgentDO extends Agent<AgentRuntimeEnv> {
     })
   }
 
+  /**
+   * Runs one static-ingestion audit through an item-keyed ephemeral Think
+   * facet. Before the upload route could only ask this DO to start workflow
+   * backed issue/automation runs; after this RPC it can use the established
+   * `subAgent` + `Think.saveMessages` pattern for a bounded best-effort audit.
+   * The facet is reclaimed after either terminal outcome because no chat or
+   * product ledger needs to survive this one-shot structuring pass.
+   */
+  @callable()
+  async startBrainAudit(
+    input: Omit<BrainAuditRunInput, 'agentId'>,
+  ): Promise<{ ok: true; status: 'completed' }> {
+    await this.requireWorkspaceAccess(input.workspaceId)
+    const agentId = await this.resolveRuntimeAgentId()
+    agentRuntimeLogger.info('agent_do.brain_audit.start_requested', {
+      agentId,
+      itemId: input.itemId,
+      workspaceId: input.workspaceId,
+    })
+
+    const audit = await this.subAgent(BrainAuditSubAgent, input.itemId)
+    const runResult = await Result.tryPromise({
+      try: async () => await audit.runAudit({ ...input, agentId }),
+      catch: (cause) => cause,
+    })
+    const cleanupResult = await Result.tryPromise({
+      try: async () =>
+        await this.deleteSubAgent(BrainAuditSubAgent, input.itemId),
+      catch: (cause) => cause,
+    })
+    cleanupResult.tapError((cause) => {
+      agentRuntimeLogger.warn('agent_do.brain_audit.cleanup_failed', {
+        agentId,
+        itemId: input.itemId,
+        message: messageFromUnknown(cause),
+        workspaceId: input.workspaceId,
+      })
+    })
+
+    if (runResult.isErr()) {
+      agentRuntimeLogger.error('agent_do.brain_audit.failed', {
+        agentId,
+        itemId: input.itemId,
+        message: messageFromUnknown(runResult.error),
+        workspaceId: input.workspaceId,
+      })
+      throw runResult.error
+    }
+
+    agentRuntimeLogger.info('agent_do.brain_audit.completed', {
+      agentId,
+      itemId: input.itemId,
+      workspaceId: input.workspaceId,
+    })
+    return { ok: true, status: runResult.value.status }
+  }
+
   async cancelIssueRun(input: {
     runId: string
     issueId: string
@@ -1081,6 +1142,24 @@ export class AgentDO extends Agent<AgentRuntimeEnv> {
   private async requireAutomationRunAccess(runId: string) {
     if (await this.checkAutomationRunAccess(runId)) return
     throw new Error('Automation run not found')
+  }
+
+  /**
+   * Confirms the route-selected workspace belongs to this AgentDO identity.
+   * Before brain-audit RPC accepted no workspace-scoped input; after this guard
+   * a caller cannot bind the facet's Brain tools to another tenant simply by
+   * supplying a different workspace id.
+   */
+  private async requireWorkspaceAccess(workspaceId: string) {
+    await this.syncAgentIdentityState()
+    const [row] = await this.getDb()
+      .select({ workspaceId: schema.agent.workspaceId })
+      .from(schema.agent)
+      .where(this.agentRuntimeWhere())
+      .limit(1)
+
+    if (row?.workspaceId === workspaceId) return
+    throw new Error('Workspace agent not found')
   }
 }
 
