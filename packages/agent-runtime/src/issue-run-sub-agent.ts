@@ -355,6 +355,11 @@ export class IssueRunSubAgent extends Think<AgentRuntimeEnv> {
     )
   }
 
+  /**
+   * Builds issue-run tools from live run state. Brain tools previously resolved
+   * `this.name` as a chat thread; they now receive the issue run's authoritative
+   * workspace, agent, and run ids from the same context as other issue tools.
+   */
   override getTools(): ToolSet {
     const context = this.getIssueToolContext()
     return {

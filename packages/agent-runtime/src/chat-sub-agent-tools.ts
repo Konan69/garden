@@ -1728,6 +1728,11 @@ async function postIssueCommentFromChat(
   return Result.ok({ comment_id: commentResult.value.comment_id })
 }
 
+/**
+ * Composes shared chat/issue tools with the runtime's authoritative context.
+ * Previously Brain always reloaded chat-thread identity, so issue runs wrote
+ * chat ids; callers can now pass the active issue-run workspace, agent, and run.
+ */
 export function createChatSubAgentTools({
   ctx,
   documentArtifacts,
