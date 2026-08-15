@@ -11,7 +11,10 @@ import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import { formatOf } from '@garden/brain/services/extractor'
 import { createGardenLogger, errorFields } from '@garden/observability/logger'
-import { requireAppRequestContext, type AppRequestContext } from '@/lib/server/context'
+import {
+  requireAppRequestContext,
+  type AppRequestContext,
+} from '@/lib/server/context'
 import { badRequest, requireWorkspaceContext } from '@/lib/server/control-plane'
 import type { AppEnv } from '@/lib/server/env'
 
@@ -38,6 +41,38 @@ function brainStorageKey(input: {
   ].join('/')
 }
 
+/**
+ * Best-effort cleanup for an upload the Brain did not adopt. Previously failure
+ * paths leaked the staged R2 object and duplicate handling deleted the active
+ * object's key; callers now always pass the newly written key for removal.
+ */
+async function discardStagedUpload(
+  files: Pick<R2Bucket, 'delete'>,
+  r2Key: string,
+  reason: 'duplicate' | 'upload_failed',
+): Promise<void> {
+  const deleteResult = await Result.tryPromise({
+    try: async () => await files.delete(r2Key),
+    catch: (cause) =>
+      new BrainFileUploadError({
+        message: cause instanceof Error ? cause.message : String(cause),
+      }),
+  })
+  deleteResult.tapError((error) => {
+    brainUploadLogger.error('brain staged upload cleanup failed', {
+      r2Key,
+      reason,
+      ...errorFields(error),
+    })
+  })
+}
+
+/**
+ * Handles the Brain file server route. The handler writes R2 first, then either
+ * adopts that key through Brain or removes it on configuration/write failure;
+ * canonical duplicates retain the existing active object and discard the new key.
+ * TanStack Start server-route and better-result boundary guidance were consulted.
+ */
 export const postBrainFileUpload = async ({
   context,
   request,
@@ -69,8 +104,7 @@ export const postBrainFileUpload = async ({
 
   const file = formResult.value.get('file')
   if (!(file instanceof File)) return badRequest('Missing file')
-  if (file.size > MAX_FILE_SIZE)
-    return badRequest('File exceeds 100 MB limit')
+  if (file.size > MAX_FILE_SIZE) return badRequest('File exceeds 100 MB limit')
   if (formatOf(file.name) === null)
     return badRequest(`Unsupported file type: ${file.name}`)
 
@@ -87,10 +121,7 @@ export const postBrainFileUpload = async ({
       await appContext.env.FILES.put(r2Key, file.stream(), {
         httpMetadata: {
           contentType,
-          contentDisposition: buildContentDisposition(
-            'inline',
-            file.name,
-          ),
+          contentDisposition: buildContentDisposition('inline', file.name),
         },
       }),
     catch: (cause) =>
@@ -126,20 +157,18 @@ export const postBrainFileUpload = async ({
         at: DateTime.makeUnsafe(new Date()),
       },
     })
-    if (added.r2Key !== undefined && added.r2Key !== r2Key) {
-      yield* Effect.tryPromise(async () => {
-        await env.FILES.delete(r2Key)
-      }).pipe(Effect.ignore)
-    }
     return added
   }).pipe(Effect.provide(brainLive))
 
   const addItemResult = await Effect.runPromise(Effect.result(addItemEffect))
   if (EffectResult.isFailure(addItemResult)) {
-    await env.FILES.delete(r2Key).catch(() => undefined)
+    await discardStagedUpload(env.FILES, r2Key, 'upload_failed')
     return badRequest(addItemResult.failure.message)
   }
   const added = addItemResult.success
+  if (added.r2Key !== undefined && added.r2Key !== r2Key) {
+    await discardStagedUpload(env.FILES, r2Key, 'duplicate')
+  }
 
   const waitUntil = appContext.waitUntil ?? (() => {})
   waitUntil(

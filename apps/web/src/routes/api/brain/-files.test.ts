@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Effect, ManagedRuntime } from 'effect'
@@ -36,10 +36,7 @@ const stubAi = {
     const texts = Array.isArray(input.text) ? input.text : [input.text ?? '']
     return {
       data: texts.map((t) =>
-        Array.from(
-          { length: 384 },
-          (_, i) => (i + (t?.length ?? 0)) / 384,
-        ),
+        Array.from({ length: 384 }, (_, i) => (i + (t?.length ?? 0)) / 384),
       ),
     }
   },
@@ -50,7 +47,10 @@ function makeFiles() {
   return {
     objects,
     bucket: {
-      put: async (key: string, value: Uint8Array | ReadableStream<Uint8Array>) => {
+      put: async (
+        key: string,
+        value: Uint8Array | ReadableStream<Uint8Array>,
+      ) => {
         const bytes =
           value instanceof ReadableStream
             ? new Uint8Array(await new Response(value).arrayBuffer())
@@ -83,33 +83,48 @@ function fakeContext(env: Record<string, unknown>): { context: unknown } {
   }
 }
 
-async function upload(
-  filename: string,
-  type: string,
-  bytes?: Uint8Array,
-  workspaceId?: string,
-  files?: ReturnType<typeof makeFiles>,
-) {
+type UploadOptions = {
+  filename: string
+  type: string
+  bytes?: Uint8Array
+  workspaceId?: string
+  files?: ReturnType<typeof makeFiles>
+  helixUrl?: string | null
+}
+
+/**
+ * Drives one upload against a caller-owned in-memory R2 bucket. Previously each
+ * invocation hid duplicate cleanup by creating a fresh bucket; shared buckets
+ * now expose whether the active or newly staged object was deleted.
+ */
+async function upload({
+  filename,
+  type,
+  bytes,
+  workspaceId,
+  files = makeFiles(),
+  helixUrl = 'http://localhost:6968',
+}: UploadOptions) {
   const content = bytes ?? (await readFile(resolve(FIXTURES, filename)))
   const form = new FormData()
   form.append('file', new File([content], filename, { type }))
-  const { objects, bucket } = files ?? makeFiles()
-  const id = workspaceId ?? `ws-route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  const { objects, bucket } = files
+  const id =
+    workspaceId ??
+    `ws-route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const deferred: Promise<unknown>[] = []
-  mockRequireAppRequestContext.mockReturnValueOnce(
-    {
-      env: {
-        FILES: bucket,
-        AI: stubAi,
-        HELIX_URL: 'http://localhost:6968',
-        HELIX_API_KEY: '',
-      },
-      auth: {},
-      waitUntil: (promise: Promise<unknown>) => {
-        deferred.push(promise)
-      },
-    } as unknown as AppRequestContext,
-  )
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      FILES: bucket,
+      AI: stubAi,
+      ...(helixUrl === null ? {} : { HELIX_URL: helixUrl }),
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+    waitUntil: (promise: Promise<unknown>) => {
+      deferred.push(promise)
+    },
+  } as unknown as AppRequestContext)
   mockRequireWorkspaceContext.mockResolvedValueOnce({
     session: { user: { id: 'user-route' } },
     workspaceId: id,
@@ -125,8 +140,15 @@ async function upload(
 }
 
 describe('POST /api/brain/files', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('uploads and indexes a file, making its content searchable', async () => {
-    const { response, objects, deferred, workspaceId } = await upload('helixdb.pdf', 'application/pdf')
+    const { response, objects, deferred, workspaceId } = await upload({
+      filename: 'helixdb.pdf',
+      type: 'application/pdf',
+    })
     expect(response.status).toBe(201)
     await Promise.all(deferred)
     const { item } = (await response.json()) as { item: { id: string } }
@@ -159,11 +181,11 @@ describe('POST /api/brain/files', () => {
   })
 
   it('rejects unsupported file types', async () => {
-    const { response } = await upload(
-      'movie.mp4',
-      'video/mp4',
-      new Uint8Array(0),
-    )
+    const { response } = await upload({
+      filename: 'movie.mp4',
+      type: 'video/mp4',
+      bytes: new Uint8Array(0),
+    })
     expect(response.status).toBe(400)
     const { error } = (await response.json()) as { error: string }
     expect(error).toContain('Unsupported file type')
@@ -194,18 +216,65 @@ describe('POST /api/brain/files', () => {
     expect(objects.size).toBe(0)
   })
 
-  it('uploads the same filename idempotently via canonical upsert', async () => {
-    const workspaceId = `ws-route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    const shared = makeFiles()
-    const first = await upload('helixdb.pdf', 'application/pdf', undefined, workspaceId, shared)
-    expect(first.response.status).toBe(201)
-    await Promise.all(first.deferred)
-    const second = await upload('helixdb.pdf', 'application/pdf', undefined, workspaceId, shared)
-    expect(second.response.status).toBe(201)
-    await Promise.all(second.deferred)
-    const a = (await first.response.json()) as { item: { id: string } }
-    const b = (await second.response.json()) as { item: { id: string } }
-    expect(a.item.id).toBe(b.item.id)
-    expect(shared.objects.size).toBe(1)
+  it('removes the staged R2 object when Brain configuration is missing', async () => {
+    const files = makeFiles()
+    const { response, objects } = await upload({
+      filename: 'helixdb.pdf',
+      type: 'application/pdf',
+      files,
+      helixUrl: null,
+    })
+    expect(response.status).toBe(400)
+    expect(objects.size).toBe(0)
   })
+
+  it.each([
+    {
+      order: 'before',
+      activeId: '00000000-0000-4000-8000-000000000001',
+      duplicateId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    },
+    {
+      order: 'after',
+      activeId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      duplicateId: '00000000-0000-4000-8000-000000000001',
+    },
+  ])(
+    'keeps the active object when its key sorts $order the duplicate',
+    async ({ activeId, duplicateId }) => {
+      const files = makeFiles()
+      const workspaceId = `ws-route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      vi.spyOn(crypto, 'randomUUID')
+        .mockReturnValueOnce(activeId)
+        .mockReturnValueOnce(duplicateId)
+
+      const first = await upload({
+        filename: 'helixdb.pdf',
+        type: 'application/pdf',
+        workspaceId,
+        files,
+      })
+      expect(first.response.status).toBe(201)
+      await Promise.all(first.deferred)
+      const activeKey = [...files.objects.keys()][0]
+      expect(activeKey).toContain(activeId)
+
+      const second = await upload({
+        filename: 'helixdb.pdf',
+        type: 'application/pdf',
+        workspaceId,
+        files,
+      })
+      expect(second.response.status).toBe(201)
+      await Promise.all(second.deferred)
+      const firstBody = (await first.response.json()) as {
+        item: { id: string }
+      }
+      const secondBody = (await second.response.json()) as {
+        item: { id: string }
+      }
+      expect(secondBody.item.id).toBe(firstBody.item.id)
+      expect([...files.objects.keys()]).toEqual([activeKey])
+    },
+  )
 })
