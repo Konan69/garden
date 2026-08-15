@@ -2,7 +2,7 @@ import type { QueryRequest } from '@helix-db/helix-db'
 import { Effect } from 'effect'
 import { expect, it } from '@effect/vitest'
 import { EDGES } from '../src/helix/constants.ts'
-import { ItemId, WorkspaceId } from '../src/domain/items.ts'
+import { ItemId, Kind, WorkspaceId } from '../src/domain/items.ts'
 import { makeBrain } from '../src/services/Brain.ts'
 import { Chunker } from '../src/services/Chunker.ts'
 import { Embeddings } from '../src/services/Embeddings.ts'
@@ -107,6 +107,52 @@ it.effect('records an append-only mention observation on its source edge', () =>
     expect(request).toContain('"mention_text"')
     expect(request).not.toContain('"add_n"')
   }),
+)
+
+it.effect(
+  'updates audit metadata without invalidating indexed source content',
+  () =>
+    Effect.gen(function* () {
+      const calls: HelixCall[] = []
+      const indexedRow = {
+        ...itemRow(1, 'Partner brief', 'partner-brief'),
+        summary: 'Acme partnership plan and named owners.',
+        indexed: true,
+        body: 'Acme and Alice will launch the Atlas project.',
+      }
+      const brain = yield* testBrain(
+        (request) =>
+          request.toJsonString().includes('brain.update_item_metadata')
+            ? { updated: [indexedRow] }
+            : { item: [indexedRow] },
+        calls,
+      )
+
+      const updated = yield* brain.updateItemMetadata({
+        tenantId,
+        itemId: ItemId.make('1'),
+        kind: Kind.make('partner-brief'),
+        summary: 'Acme partnership plan and named owners.',
+      })
+
+      expect(updated.kind).toBe(Kind.make('partner-brief'))
+      expect(updated.summary).toBe(
+        'Acme partnership plan and named owners.',
+      )
+      expect(updated.indexed).toBe(true)
+      expect(updated.body).toBe(
+        'Acme and Alice will launch the Atlas project.',
+      )
+      expect(calls).toHaveLength(2)
+      expect(calls[0]?.options?.awaitDurability).toBe(true)
+      const request = calls[0]?.request.toJsonString() ?? ''
+      expect(request).toContain('"query_name":"brain.update_item_metadata"')
+      expect(request).toContain('"name":"kind"')
+      expect(request).toContain('"name":"summary"')
+      expect(request).not.toContain('"name":"indexed"')
+      expect(request).not.toContain('"name":"body"')
+      expect(request).not.toContain('"name":"embedding"')
+    }),
 )
 
 it.effect(

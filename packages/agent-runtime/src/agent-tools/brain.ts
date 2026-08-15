@@ -20,6 +20,7 @@ export type BrainToolOperations = Pick<
   | 'ensureIndexes'
   | 'search'
   | 'addText'
+  | 'updateItemMetadata'
   | 'recordMention'
   | 'linkItems'
   | 'neighborhood'
@@ -45,7 +46,7 @@ const brainSearchInputSchema = z
   })
   .strict()
 
-const addToBrainInputSchema = z
+const createBrainItemInputSchema = z
   .object({
     label: z
       .string()
@@ -72,6 +73,33 @@ const addToBrainInputSchema = z
       .describe('Optional one-line summary for fast triage.'),
   })
   .strict()
+
+const updateBrainItemInputSchema = z
+  .object({
+    itemId: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('Existing brain item id whose kind and summary should change.'),
+    kind: z
+      .string()
+      .trim()
+      .min(1)
+      .describe(
+        'Free-text kind you judge best for the existing item; it is not an enum.',
+      ),
+    summary: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('Concise source-grounded summary of the existing item.'),
+  })
+  .strict()
+
+const addToBrainInputSchema = z.union([
+  createBrainItemInputSchema,
+  updateBrainItemInputSchema,
+])
 
 const brainRecordMentionInputSchema = z
   .object({
@@ -304,12 +332,28 @@ export function createBrainTools(deps: {
     })
   }
 
-  const runAddText = async (
+  /**
+   * Creates new agent-written knowledge or applies audit metadata to an
+   * existing indexed item. Previously add_to_brain could only create notes;
+   * itemId mode now changes kind/summary without resubmitting body content or
+   * touching embeddings.
+   */
+  const runAddToBrain = async (
     ctx: BrainToolContext,
     input: z.infer<typeof addToBrainInputSchema>,
   ) => {
     if (!configured) return unconfigured
     const result = await captureBrainOperation(async () => {
+      if ('itemId' in input) {
+        return await runBrain((brain) =>
+          brain.updateItemMetadata({
+            tenantId: WorkspaceId.make(ctx.workspaceId),
+            itemId: ItemId.make(input.itemId),
+            kind: Kind.make(input.kind),
+            summary: input.summary,
+          }),
+        )
+      }
       await ensureIndexes()
       return await runBrain((brain) =>
         brain.addText({
@@ -437,12 +481,12 @@ export function createBrainTools(deps: {
 
     add_to_brain: tool({
       description:
-        'Persist durable knowledge in the workspace’s Org Brain. Kind is free text you choose—not an enum—such as "decision", "person", or "policy"; label clearly and write content in your own words.',
+        'Persist durable knowledge in the workspace’s Org Brain, or update an existing indexed item’s kind and summary by passing itemId. Kind is free text you choose—not an enum. Metadata updates preserve body content and embeddings.',
       inputSchema: addToBrainInputSchema,
       execute: async (input) => {
         const resolved = await resolveContext()
         if (!resolved.ok) return { ok: false, error: resolved.error }
-        return await runAddText(resolved.ctx, input)
+        return await runAddToBrain(resolved.ctx, input)
       },
     }),
 

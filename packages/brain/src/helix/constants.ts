@@ -45,6 +45,7 @@ export const QUERY = {
   sectionsOf: 'brain.sections_of',
   recordMention: 'brain.record_mention',
   linkItems: 'brain.link_items',
+  updateItemMetadata: 'brain.update_item_metadata',
   neighborhood: 'brain.neighborhood',
   countNodes: 'brain.count_nodes',
 } as const

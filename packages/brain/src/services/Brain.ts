@@ -64,6 +64,18 @@ export type BrainShape = {
     summary?: string
     actor: Actor
   }) => Effect.Effect<BrainItem, HelixError | WriteConflict | EmbedError>
+  /**
+   * Updates agent-authored structure without changing source content. Static
+   * ingestion previously had no way to replace the mechanical `file` kind and
+   * extracted title summary; metadata-only updates now preserve embeddings,
+   * sections, body, storage label, and indexed state.
+   */
+  readonly updateItemMetadata: (input: {
+    tenantId: WorkspaceId
+    itemId: ItemId
+    kind: Kind
+    summary: string
+  }) => Effect.Effect<BrainItem, HelixError | WriteConflict>
   readonly index: (
     itemId: ItemId,
     tenantId: WorkspaceId,
@@ -825,6 +837,73 @@ export const makeBrain = Effect.gen(function* () {
     return { items, edges }
   })
 
+  /**
+   * Applies only audit-authored kind and summary properties to an existing
+   * tenant item. Before this path, canonical upsert could move a file-shaped
+   * item onto the note lookup label when an agent invented a free-text kind;
+   * direct node mutation now leaves content-derived indexes and storage labels
+   * untouched. Helix v3 traversal/setProperty behavior was checked in the
+   * installed SDK source.
+   */
+  const updateItemMetadata = Effect.fn('Brain.updateItemMetadata')(
+    function* (input: {
+      tenantId: WorkspaceId
+      itemId: ItemId
+      kind: Kind
+      summary: string
+    }) {
+      const kind = input.kind.trim()
+      const summary = input.summary.trim()
+      if (kind === '') {
+        return yield* Effect.fail(
+          new HelixError({ message: 'item kind must not be blank' }),
+        )
+      }
+      if (summary === '') {
+        return yield* Effect.fail(
+          new HelixError({ message: 'item summary must not be blank' }),
+        )
+      }
+
+      const request = writeBatch()
+        .varAs(
+          'updated',
+          setProperties(
+            g()
+              .n([nodeId(input.itemId)])
+              .where(
+                Predicate.eq(PROPS.tenantId, input.tenantId),
+              ) as unknown as Traversal<'nodes', 'write'>,
+            {
+              [PROPS.kind]: kind,
+              [PROPS.summary]: summary,
+            },
+          ),
+        )
+        .returning(['updated'])
+        .toQueryRequest({ queryName: QUERY.updateItemMetadata })
+      const result = yield* retryWriteConflict(
+        helix.run(request, { awaitDurability: true }),
+      )
+      if (firstRow(result, 'updated') === undefined) {
+        return yield* Effect.fail(
+          new HelixError({ message: `item not found: ${input.itemId}` }),
+        )
+      }
+      return yield* readItem(helix, input.itemId, input.tenantId).pipe(
+        Effect.flatMap((loaded) =>
+          loaded === null
+            ? Effect.fail(
+                new HelixError({
+                  message: `item not found after metadata update: ${input.itemId}`,
+                }),
+              )
+            : Effect.succeed(loaded),
+        ),
+      )
+    },
+  )
+
   return Brain.of({
     ensureIndexes: () =>
       Effect.gen(function* () {
@@ -1040,6 +1119,7 @@ export const makeBrain = Effect.gen(function* () {
           ),
         )
       }),
+    updateItemMetadata,
     index: (itemId, tenantId) =>
       Effect.gen(function* () {
         const item = yield* readItem(helix, itemId, tenantId).pipe(

@@ -37,6 +37,7 @@ describe('createBrainTools', () => {
           body: input.body,
         })
       },
+      updateItemMetadata: () => Effect.die('unused updateItemMetadata'),
       recordMention: () => Effect.die('unused recordMention'),
       linkItems: () => Effect.die('unused linkItems'),
       neighborhood: () => Effect.die('unused neighborhood'),
@@ -71,6 +72,74 @@ describe('createBrainTools', () => {
       ok: true,
       id: ItemId.make('42'),
       kind: Kind.make('relationship-steward'),
+    })
+  })
+
+  it('updates an indexed item through add_to_brain without ensuring indexes', async () => {
+    let metadataInput:
+      | {
+          itemId: ItemId
+          kind: Kind
+          summary: string
+        }
+      | undefined
+    let ensureCount = 0
+    const brain: BrainToolOperations = {
+      ensureIndexes: () => {
+        ensureCount += 1
+        return Effect.void
+      },
+      search: () => Effect.succeed([]),
+      addText: () => Effect.die('unused addText'),
+      updateItemMetadata: (input) => {
+        metadataInput = input
+        return Effect.succeed({
+          id: input.itemId,
+          tenantId: input.tenantId,
+          kind: input.kind,
+          label: 'Acme brief',
+          summary: input.summary,
+          indexed: true,
+          origin: {
+            actor: { _tag: 'Human', userId: 'user-1' },
+            at: DateTime.makeUnsafe(new Date('2026-01-01T00:00:00Z')),
+          },
+          body: 'Acme and Alice are launching Atlas.',
+        })
+      },
+      recordMention: () => Effect.die('unused recordMention'),
+      linkItems: () => Effect.die('unused linkItems'),
+      neighborhood: () => Effect.die('unused neighborhood'),
+    }
+    const tools = createBrainTools({
+      env: {},
+      ai: { run: async () => ({ data: [] }) },
+      files: { get: async () => null },
+      getContext: () => ({
+        workspaceId: 'workspace-1',
+        agentId: 'agent-1',
+        runId: 'brain-audit:42',
+      }),
+      brain,
+    })
+
+    const result = await execute(tools.add_to_brain, {
+      itemId: '42',
+      kind: 'partner-brief',
+      summary: 'Acme partnership brief naming Alice and Atlas.',
+    })
+
+    expect(metadataInput).toMatchObject({
+      itemId: ItemId.make('42'),
+      kind: Kind.make('partner-brief'),
+      summary: 'Acme partnership brief naming Alice and Atlas.',
+    })
+    expect(ensureCount).toBe(0)
+    expect(result).toMatchObject({
+      ok: true,
+      id: ItemId.make('42'),
+      kind: Kind.make('partner-brief'),
+      indexed: true,
     })
   })
 })
