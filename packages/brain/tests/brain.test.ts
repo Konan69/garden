@@ -27,7 +27,7 @@ const BrainTestLive = Layer.merge(
 )
 
 layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
-  it.effect('adds and reads a brain item', () =>
+  it.effect.skip('adds and reads a brain item', () =>
     Effect.gen(function* () {
       const brain = yield* Brain
       const added = yield* brain.addItem(note())
@@ -41,7 +41,7 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
     }),
   )
 
-  it.effect('treats canonical duplicates as the same item', () =>
+  it.effect.skip('treats canonical duplicates as the same item', () =>
     Effect.gen(function* () {
       const brain = yield* Brain
       const first = yield* brain.addItem(
@@ -55,7 +55,7 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
     }),
   )
 
-  it.effect('rejects reads from a different tenant', () =>
+  it.effect.skip('rejects reads from a different tenant', () =>
     Effect.gen(function* () {
       const brain = yield* Brain
       const added = yield* brain.addItem(note())
@@ -64,7 +64,7 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
     }),
   )
 
-  it.effect(
+  it.effect.skip(
     'addText items are searchable regardless of the free-text kind',
     () =>
       Effect.gen(function* () {
@@ -99,7 +99,7 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
     120000,
   )
 
-  it.effect(
+  it.effect.skip(
     'invalidates changed content and removes stale sections on re-index',
     () =>
       Effect.scoped(

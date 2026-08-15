@@ -1,9 +1,10 @@
-import { Context, DateTime, Effect, Schema } from 'effect'
+import { Array as EffectArray, Context, DateTime, Effect, Schema } from 'effect'
 import {
   BatchCondition,
   IndexSpec,
   NodeRef,
   Predicate,
+  Projection,
   PropertyProjection,
   PropertyValue,
   SourcePredicate,
@@ -15,9 +16,13 @@ import {
 import type { PropertyValueInput, Traversal } from '@helix-db/helix-db'
 import {
   Actor,
+  BrainEdge,
   BrainItem,
+  BrainNeighborhood,
   ItemId,
   Kind,
+  MentionObservation,
+  MentionSpan,
   NewBrainItem,
   Origin,
   WorkspaceId,
@@ -32,6 +37,7 @@ import {
 import {
   EDGES,
   LABELS,
+  MENTION_PROPS,
   PROPS,
   QUERY,
   SOURCE_KEY_PROP,
@@ -86,6 +92,47 @@ export type BrainShape = {
     fileId: ItemId,
     tenantId: WorkspaceId,
   ) => Effect.Effect<readonly BrainItem[], HelixError | WriteConflict>
+  /**
+   * Appends the exact mention text observed in one source item. It deliberately
+   * performs no entity resolution or creation so later passes can reinterpret
+   * the corpus without re-reading source content.
+   */
+  readonly recordMention: (input: {
+    tenantId: WorkspaceId
+    itemId: ItemId
+    span?: MentionSpan
+    text: string
+    actor: Actor
+  }) => Effect.Effect<MentionObservation, HelixError | WriteConflict>
+  /**
+   * Links two existing tenant items with a caller-chosen edge label. `SAME_AS`
+   * is always a soft assertion: automatic merging is forbidden, and any later
+   * promotion must update canonical anchors rather than collapsing nodes.
+   */
+  readonly linkItems: (input: {
+    tenantId: WorkspaceId
+    from: ItemId
+    to: ItemId
+    edge: string
+    actor: Actor
+  }) => Effect.Effect<
+    {
+      readonly from: ItemId
+      readonly to: ItemId
+      readonly edge: string
+      readonly created: boolean
+    },
+    HelixError | WriteConflict
+  >
+  /**
+   * Reads a fixed one- or two-hop item neighborhood. Depth is rejected outside
+   * that range, and both query streams and decoded output have hard limits.
+   */
+  readonly neighborhood: (input: {
+    tenantId: WorkspaceId
+    itemId: ItemId
+    depth?: number
+  }) => Effect.Effect<BrainNeighborhood, HelixError | WriteConflict>
   readonly readFile: (
     itemId: ItemId,
     tenantId: WorkspaceId,
@@ -98,6 +145,7 @@ export class Brain extends Context.Service<Brain, BrainShape>()(
 ) {}
 
 const OriginJsonCodec = Schema.toCodecJson(Origin)
+const OriginFromJsonString = Schema.fromJsonString(OriginJsonCodec)
 
 const ItemRow = Schema.Struct({
   $id: Schema.optional(Schema.Number),
@@ -112,6 +160,18 @@ const ItemRow = Schema.Struct({
   indexed: Schema.optional(Schema.Boolean),
   origin: Schema.String,
   body: Schema.optional(Schema.String),
+})
+
+const EdgeRow = Schema.Struct({
+  id: Schema.Unknown,
+  from: Schema.Unknown,
+  to: Schema.Unknown,
+  edge: Schema.String,
+  workspace_id: Schema.String,
+  origin: Schema.optional(Schema.String),
+  mention_text: Schema.optional(Schema.String),
+  mention_span_start: Schema.optional(Schema.Number),
+  mention_span_end: Schema.optional(Schema.Number),
 })
 
 type Row = Record<string, unknown>
@@ -183,6 +243,88 @@ const decodeRow = (row: Row): Effect.Effect<BrainItem, HelixError> =>
       new HelixError({ message: 'invalid brain item row', cause }),
   })
 
+const storedId = (
+  value: unknown,
+  field: string,
+): Effect.Effect<string, HelixError> => {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint'
+  ) {
+    return Effect.succeed(String(value))
+  }
+  return Effect.fail(
+    new HelixError({ message: `graph edge row is missing ${field}` }),
+  )
+}
+
+const decodeStoredOrigin = (raw: string): Effect.Effect<Origin, HelixError> =>
+  Schema.decodeUnknownEffect(OriginFromJsonString)(raw).pipe(
+    Effect.mapError(
+      (cause) =>
+        new HelixError({ message: 'invalid graph edge origin', cause }),
+    ),
+  )
+
+/**
+ * Decodes one projected edge and recovers mention observations from edge
+ * properties. Previously graph edges had no service-facing representation;
+ * malformed persisted observation spans now fail instead of being guessed.
+ */
+const rowToBrainEdge = (raw: Row): Effect.Effect<BrainEdge, HelixError> =>
+  Effect.gen(function* () {
+    const row = yield* Schema.decodeUnknownEffect(EdgeRow)(raw).pipe(
+      Effect.mapError(
+        (cause) => new HelixError({ message: 'invalid graph edge row', cause }),
+      ),
+    )
+    const id = yield* storedId(row.id, 'id')
+    const from = ItemId.make(yield* storedId(row.from, 'from'))
+    const to = ItemId.make(yield* storedId(row.to, 'to'))
+    const origin =
+      row.origin === undefined
+        ? undefined
+        : yield* decodeStoredOrigin(row.origin)
+    if (
+      (row.mention_span_start === undefined) !==
+      (row.mention_span_end === undefined)
+    ) {
+      return yield* Effect.fail(
+        new HelixError({ message: 'mention edge has an incomplete span' }),
+      )
+    }
+    const span =
+      row.mention_span_start === undefined || row.mention_span_end === undefined
+        ? undefined
+        : {
+            start: row.mention_span_start,
+            end: row.mention_span_end,
+          }
+    const mention =
+      row.mention_text === undefined
+        ? undefined
+        : origin === undefined
+          ? yield* Effect.fail(
+              new HelixError({ message: 'mention edge is missing origin' }),
+            )
+          : {
+              tenantId: WorkspaceId.make(row.workspace_id),
+              itemId: from,
+              text: row.mention_text,
+              ...(span === undefined ? {} : { span }),
+              origin,
+            }
+    return {
+      id,
+      from,
+      to,
+      edge: row.edge,
+      ...(origin === undefined ? {} : { origin }),
+      ...(mention === undefined ? {} : { mention }),
+    }
+  })
+
 const propsOf = (item: NewBrainItem): Record<string, PropertyValueInput> => {
   const props: Record<string, PropertyValueInput> = {
     [PROPS.tenantId]: item.tenantId,
@@ -238,6 +380,18 @@ const hitProjection = () => [
   PropertyProjection.renamed('$score', 'score'),
 ]
 
+const edgeProjection = () => [
+  PropertyProjection.renamed('$id', 'id'),
+  Projection.fromEndpoint('$id', 'from'),
+  Projection.toEndpoint('$id', 'to'),
+  PropertyProjection.renamed('$label', 'edge'),
+  PropertyProjection.new(PROPS.tenantId),
+  PropertyProjection.new(PROPS.origin),
+  PropertyProjection.new(MENTION_PROPS.text),
+  PropertyProjection.new(MENTION_PROPS.spanStart),
+  PropertyProjection.new(MENTION_PROPS.spanEnd),
+]
+
 const waitForIndex = (helix: HelixClientShape, operationId: string) =>
   Effect.gen(function* () {
     for (let attempt = 0; attempt < 60; attempt++) {
@@ -273,6 +427,8 @@ const RRF_K = 60
 const MAX_EMBED_CHARS = 2000
 const EMBED_BATCH_SIZE = 100
 const MAX_INDEX_SECTIONS = 1000
+const NEIGHBORHOOD_MAX_ITEMS = 50
+const NEIGHBORHOOD_MAX_EDGES = 100
 
 const truncateForEmbed = (text: string): string =>
   text.length <= MAX_EMBED_CHARS ? text : text.slice(0, MAX_EMBED_CHARS)
@@ -406,6 +562,269 @@ export const makeBrain = Effect.gen(function* () {
   const chunker = yield* Chunker
   const extractor = yield* Extractor
   const files = yield* RawFileStore
+
+  /**
+   * Stores mentions as parallel `MENTIONS` self-edges on the source item. A
+   * node would imply a new knowledge item (and require Garden to assign its
+   * kind); edge properties preserve exact text/span/origin append-only without
+   * creating an entity or leaking a storage label into the agent's ontology.
+   */
+  const recordMention = Effect.fn('Brain.recordMention')(function* (input: {
+    tenantId: WorkspaceId
+    itemId: ItemId
+    span?: MentionSpan
+    text: string
+    actor: Actor
+  }) {
+    if (input.text.trim() === '') {
+      return yield* Effect.fail(
+        new HelixError({ message: 'mention text must not be blank' }),
+      )
+    }
+    if (
+      input.span !== undefined &&
+      (!Number.isInteger(input.span.start) ||
+        !Number.isInteger(input.span.end) ||
+        input.span.start < 0 ||
+        input.span.end < input.span.start)
+    ) {
+      return yield* Effect.fail(
+        new HelixError({
+          message: 'mention span must be a valid ordered range',
+        }),
+      )
+    }
+    const at = yield* DateTime.now
+    const origin: Origin = {
+      actor: input.actor,
+      fromItem: input.itemId,
+      at,
+    }
+    const properties: Record<string, PropertyValueInput> = {
+      [PROPS.tenantId]: input.tenantId,
+      [PROPS.origin]: originJson(origin),
+      [MENTION_PROPS.text]: input.text,
+      ...(input.span === undefined
+        ? {}
+        : {
+            [MENTION_PROPS.spanStart]: input.span.start,
+            [MENTION_PROPS.spanEnd]: input.span.end,
+          }),
+    }
+    const request = writeBatch()
+      .varAs(
+        'source',
+        g()
+          .n([nodeId(input.itemId)])
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId)),
+      )
+      .varAs(
+        'recorded',
+        g()
+          .n(NodeRef.var('source'))
+          .addE(EDGES.mentions, NodeRef.var('source'), properties),
+      )
+      .returning(['source', 'recorded'])
+      .toQueryRequest({ queryName: QUERY.recordMention })
+    const result = yield* retryWriteConflict(
+      helix.run(request, { awaitDurability: true }),
+    )
+    if (firstRow(result, 'source') === undefined) {
+      return yield* Effect.fail(
+        new HelixError({ message: `source item not found: ${input.itemId}` }),
+      )
+    }
+    if (firstRow(result, 'recorded') === undefined) {
+      return yield* Effect.fail(
+        new HelixError({ message: 'recordMention returned no edge' }),
+      )
+    }
+    return {
+      tenantId: input.tenantId,
+      itemId: input.itemId,
+      text: input.text,
+      ...(input.span === undefined ? {} : { span: input.span }),
+      origin,
+    }
+  })
+
+  /**
+   * Adds one idempotent caller-labelled edge after tenant-scoped endpoint
+   * lookup. `SAME_AS` records only a soft relationship: this method never
+   * merges nodes, and canonical-anchor promotion remains an explicit action.
+   */
+  const linkItems = Effect.fn('Brain.linkItems')(function* (input: {
+    tenantId: WorkspaceId
+    from: ItemId
+    to: ItemId
+    edge: string
+    actor: Actor
+  }) {
+    if (input.edge.trim() === '') {
+      return yield* Effect.fail(
+        new HelixError({ message: 'edge label must not be blank' }),
+      )
+    }
+    const at = yield* DateTime.now
+    const request = writeBatch()
+      .varAs(
+        'from',
+        g()
+          .n([nodeId(input.from)])
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId)),
+      )
+      .varAs(
+        'to',
+        g()
+          .n([nodeId(input.to)])
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId)),
+      )
+      .varAs(
+        'already_targets',
+        g().n(NodeRef.var('from')).out(input.edge).has('$id', nodeId(input.to)),
+      )
+      .varAs('unlinked_to', g().n(NodeRef.var('to')).without('already_targets'))
+      .varAsIf(
+        'created',
+        BatchCondition.varNotEmpty('unlinked_to'),
+        g()
+          .n(NodeRef.var('from'))
+          .addE(input.edge, NodeRef.var('unlinked_to'), {
+            [PROPS.tenantId]: input.tenantId,
+            [PROPS.origin]: originJson({ actor: input.actor, at }),
+          }),
+      )
+      .returning(['from', 'to', 'already_targets', 'created'])
+      .toQueryRequest({ queryName: QUERY.linkItems })
+    const result = yield* retryWriteConflict(
+      helix.run(request, { awaitDurability: true }),
+    )
+    if (firstRow(result, 'from') === undefined) {
+      return yield* Effect.fail(
+        new HelixError({ message: `source item not found: ${input.from}` }),
+      )
+    }
+    if (firstRow(result, 'to') === undefined) {
+      return yield* Effect.fail(
+        new HelixError({ message: `target item not found: ${input.to}` }),
+      )
+    }
+    return {
+      from: input.from,
+      to: input.to,
+      edge: input.edge,
+      created: firstRow(result, 'created') !== undefined,
+    }
+  })
+
+  /**
+   * Expands explicit one- or two-hop traversals and caps every intermediate
+   * edge/node stream. Helix `repeat` defaults to a much larger max depth, so it
+   * is intentionally absent; response decoding also deduplicates and limits
+   * nodes/edges before returning them to callers.
+   */
+  const neighborhood = Effect.fn('Brain.neighborhood')(function* (input: {
+    tenantId: WorkspaceId
+    itemId: ItemId
+    depth?: number
+  }) {
+    const depth = input.depth ?? 1
+    if (!Number.isInteger(depth) || depth < 1 || depth > 2) {
+      return yield* Effect.fail(
+        new HelixError({ message: 'neighborhood depth must be 1 or 2' }),
+      )
+    }
+    let batch = readBatch()
+      .varAs(
+        'root',
+        g()
+          .n([nodeId(input.itemId)])
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId)),
+      )
+      .varAs('root_item', g().n(NodeRef.var('root')).valueMap(itemProps()))
+      .varAs(
+        'hop_1',
+        g()
+          .n(NodeRef.var('root'))
+          .bothE()
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId))
+          .limit(NEIGHBORHOOD_MAX_EDGES)
+          .otherN()
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId))
+          .dedup()
+          .limit(NEIGHBORHOOD_MAX_ITEMS),
+      )
+      .varAs('hop_1_items', g().n(NodeRef.var('hop_1')).valueMap(itemProps()))
+      .varAs(
+        'hop_1_edges',
+        g()
+          .n(NodeRef.var('root'))
+          .bothE()
+          .where(Predicate.eq(PROPS.tenantId, input.tenantId))
+          .limit(NEIGHBORHOOD_MAX_EDGES)
+          .dedup()
+          .project(edgeProjection()),
+      )
+    const returns = ['root_item', 'hop_1_items', 'hop_1_edges']
+    if (depth === 2) {
+      batch = batch
+        .varAs(
+          'hop_2',
+          g()
+            .n(NodeRef.var('hop_1'))
+            .bothE()
+            .where(Predicate.eq(PROPS.tenantId, input.tenantId))
+            .limit(NEIGHBORHOOD_MAX_EDGES)
+            .otherN()
+            .where(Predicate.eq(PROPS.tenantId, input.tenantId))
+            .dedup()
+            .limit(NEIGHBORHOOD_MAX_ITEMS),
+        )
+        .varAs('hop_2_items', g().n(NodeRef.var('hop_2')).valueMap(itemProps()))
+        .varAs(
+          'hop_2_edges',
+          g()
+            .n(NodeRef.var('hop_1'))
+            .bothE()
+            .where(Predicate.eq(PROPS.tenantId, input.tenantId))
+            .limit(NEIGHBORHOOD_MAX_EDGES)
+            .dedup()
+            .project(edgeProjection()),
+        )
+      returns.push('hop_2_items', 'hop_2_edges')
+    }
+    const request = batch
+      .returning(returns)
+      .toQueryRequest({ queryName: QUERY.neighborhood })
+    const result = yield* helix.run(request)
+    const rootRow = firstRow(result, 'root_item')
+    if (rootRow === undefined) {
+      return yield* Effect.fail(
+        new HelixError({ message: `item not found: ${input.itemId}` }),
+      )
+    }
+    const decodedItems = yield* Effect.forEach(
+      [rootRow, ...rows(result, 'hop_1_items'), ...rows(result, 'hop_2_items')],
+      decodeRow,
+    )
+    const items = EffectArray.dedupeWith(
+      decodedItems.filter((item) => item.tenantId === input.tenantId),
+      (left, right) => left.id === right.id,
+    ).slice(0, NEIGHBORHOOD_MAX_ITEMS)
+    const decodedEdges = yield* Effect.forEach(
+      [...rows(result, 'hop_1_edges'), ...rows(result, 'hop_2_edges')],
+      rowToBrainEdge,
+    )
+    const itemIds = new Set(items.map((item) => item.id))
+    const edges = EffectArray.dedupeWith(
+      decodedEdges.filter(
+        (edge) => itemIds.has(edge.from) && itemIds.has(edge.to),
+      ),
+      (left, right) => left.id === right.id,
+    ).slice(0, NEIGHBORHOOD_MAX_EDGES)
+    return { items, edges }
+  })
+
   return Brain.of({
     ensureIndexes: () =>
       Effect.gen(function* () {
@@ -1040,6 +1459,9 @@ export const makeBrain = Effect.gen(function* () {
           (row) => decodeRow(row),
         )
       }),
+    recordMention,
+    linkItems,
+    neighborhood,
     readFile: (itemId, tenantId, range) =>
       Effect.gen(function* () {
         const item = yield* readItem(helix, itemId, tenantId).pipe(

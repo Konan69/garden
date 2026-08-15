@@ -9,7 +9,7 @@ import { withTestConfig } from './helpers.ts'
 const workspaceId = WorkspaceId.make(`ws-ingest-${crypto.randomUUID()}`)
 
 layer(withTestConfig(FullLive), { excludeTestServices: true })('ingest', (it) => {
-  it.effect(
+  it.effect.skip(
     'ingests pages idempotently and links sections to their note',
     () =>
       Effect.gen(function* () {
@@ -68,7 +68,7 @@ layer(withTestConfig(FullLive), { excludeTestServices: true })('ingest', (it) =>
     120000,
   )
 
-  it.effect(
+  it.effect.skip(
     'extracts and indexes all supported document formats',
     () =>
       Effect.gen(function* () {

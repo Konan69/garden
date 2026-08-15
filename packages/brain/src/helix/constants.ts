@@ -17,6 +17,12 @@ export const PROPS = {
   body: 'body',
 } as const
 
+export const MENTION_PROPS = {
+  text: 'mention_text',
+  spanStart: 'mention_span_start',
+  spanEnd: 'mention_span_end',
+} as const
+
 export const VECTOR_PROP = 'embedding'
 
 export const SOURCE_KEY_PROP = 'source_key'
@@ -37,5 +43,8 @@ export const QUERY = {
   vectorSearch: 'brain.vector_search',
   linkSections: 'brain.link_sections',
   sectionsOf: 'brain.sections_of',
+  recordMention: 'brain.record_mention',
+  linkItems: 'brain.link_items',
+  neighborhood: 'brain.neighborhood',
   countNodes: 'brain.count_nodes',
 } as const
