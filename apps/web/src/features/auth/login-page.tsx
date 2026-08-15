@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { GARDEN_ANALYTICS_EVENTS } from '@garden/observability/analytics/events'
 import { toast } from 'sonner'
 import { LoginForm } from '@/components/login-form'
+import { LoginFoliage } from '@/components/login-foliage'
 import { authClient } from '@/lib/auth/client'
 import {
   capturePostHogBrowserEvent,
@@ -79,9 +80,10 @@ export function LoginPage({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-10">
+      <LoginFoliage className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto h-[clamp(180px,34vh,330px)] w-full max-w-6xl text-brand" />
       <LoginForm
-        className="w-full max-w-5xl"
+        className="relative z-10 w-full max-w-sm"
         mode={mode}
         name={name}
         email={email}

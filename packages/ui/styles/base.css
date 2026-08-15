@@ -14,23 +14,32 @@
   color: var(--shiki-dark) !important;
 }
 
-/* Brand icon: entrance spin animation */
-@keyframes entrance-spin {
+/* Brand icon: one-time "sprout" entrance — the leaf unfurls into place.
+ * Replaced the old asterisk-era entrance-spin when the mark became a leaf. */
+@keyframes entrance-sprout {
   0% {
-    transform: rotate(0deg);
+    transform: scale(0.55) rotate(-16deg);
     opacity: 0;
   }
-  50% {
+  70% {
+    transform: scale(1.06) rotate(2deg);
     opacity: 1;
   }
   100% {
-    transform: rotate(360deg);
+    transform: scale(1) rotate(0deg);
     opacity: 1;
   }
 }
 
-.animate-entrance-spin {
-  animation: entrance-spin 0.6s ease-out forwards;
+.animate-entrance-sprout {
+  animation: entrance-sprout 0.6s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+  transform-origin: 30% 85%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-entrance-sprout {
+    animation: none;
+  }
 }
 
 /* Chat FAB: gentle color + border tint while a chat task is running.
