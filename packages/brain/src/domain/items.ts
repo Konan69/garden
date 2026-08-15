@@ -61,5 +61,7 @@ export class NewBrainItem extends Schema.Class<NewBrainItem>('NewBrainItem')({
 export class SearchHit extends Schema.Class<SearchHit>('SearchHit')({
   item: BrainItem,
   score: Schema.Number,
+  bm25Score: Schema.optional(Schema.Number),
+  distance: Schema.optional(Schema.Number),
   cite: Schema.optional(Schema.String),
 }) {}

@@ -83,11 +83,17 @@ function fakeContext(env: Record<string, unknown>): { context: unknown } {
   }
 }
 
-async function upload(filename: string, type: string, bytes?: Uint8Array, workspaceId?: string) {
+async function upload(
+  filename: string,
+  type: string,
+  bytes?: Uint8Array,
+  workspaceId?: string,
+  files?: ReturnType<typeof makeFiles>,
+) {
   const content = bytes ?? (await readFile(resolve(FIXTURES, filename)))
   const form = new FormData()
   form.append('file', new File([content], filename, { type }))
-  const { objects, bucket } = makeFiles()
+  const { objects, bucket } = files ?? makeFiles()
   const id = workspaceId ?? `ws-route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const deferred: Promise<unknown>[] = []
   mockRequireAppRequestContext.mockReturnValueOnce(
@@ -190,14 +196,16 @@ describe('POST /api/brain/files', () => {
 
   it('uploads the same filename idempotently via canonical upsert', async () => {
     const workspaceId = `ws-route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    const first = await upload('helixdb.pdf', 'application/pdf', undefined, workspaceId)
+    const shared = makeFiles()
+    const first = await upload('helixdb.pdf', 'application/pdf', undefined, workspaceId, shared)
     expect(first.response.status).toBe(201)
     await Promise.all(first.deferred)
-    const second = await upload('helixdb.pdf', 'application/pdf', undefined, workspaceId)
+    const second = await upload('helixdb.pdf', 'application/pdf', undefined, workspaceId, shared)
     expect(second.response.status).toBe(201)
     await Promise.all(second.deferred)
     const a = (await first.response.json()) as { item: { id: string } }
     const b = (await second.response.json()) as { item: { id: string } }
     expect(a.item.id).toBe(b.item.id)
+    expect(shared.objects.size).toBe(1)
   })
 })

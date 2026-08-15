@@ -34,18 +34,36 @@ export const splitHeadings = (
   const sections: { title: string; body: string; path: string }[] = []
   const chain: string[] = rootTitle === undefined ? [] : [rootTitle]
   let current: { title: string; body: string; path: string } | null = null
+  let preamble = ''
   for (const line of body.split('\n')) {
     const info = headingInfo(line)
     if (info !== null) {
       if (current !== null) sections.push(current)
+      if (preamble !== '') {
+        sections.unshift({
+          title: rootTitle ?? 'Preamble',
+          body: preamble,
+          path: rootTitle ?? 'Preamble',
+        })
+        preamble = ''
+      }
       chain.length = info.depth
       chain[info.depth - 1] = info.title
       current = { title: info.title, body: '', path: chain.join(' > ') }
     } else if (current !== null) {
       current.body = current.body === '' ? line : `${current.body}\n${line}`
+    } else {
+      preamble = preamble === '' ? line : `${preamble}\n${line}`
     }
   }
   if (current !== null) sections.push(current)
+  if (preamble !== '') {
+    sections.unshift({
+      title: rootTitle ?? 'Preamble',
+      body: preamble,
+      path: rootTitle ?? 'Preamble',
+    })
+  }
   return sections.flatMap((section) => {
     if (section.body.length <= size) {
       return [
@@ -72,9 +90,6 @@ const chunkBody = (body: string): readonly string[] => {
   return paragraphs
 }
 
-const wrapChunks = (parts: readonly string[]): readonly Chunk[] =>
-  parts.map((part, i) => ({ title: `Part ${i + 1}`, body: part }))
-
 const takeTail = (text: string, overlap: number): string => {
   const words = text.split(/\s+/)
   let tail = ''
@@ -89,6 +104,9 @@ export const chunkBySize = (
   options: ChunkOptions = DEFAULT_OPTIONS,
 ): readonly Chunk[] => {
   const { size, overlap } = options
+  if (size <= 0 || overlap < 0 || overlap >= size) {
+    throw new Error('chunk size must be positive and overlap must satisfy 0 <= overlap < size')
+  }
   const paragraphs = chunkBody(body)
   const chunks: Chunk[] = []
   let current = ''
@@ -103,7 +121,7 @@ export const chunkBySize = (
       current.length + rest.length + 2 > size &&
       current.length < size
     ) {
-      chunks.push({ title: `Part ${chunks.length + 1}`, body: current })
+      pushChunk(current)
       current = takeTail(current, overlap)
     }
     if (current === '') {
@@ -112,8 +130,9 @@ export const chunkBySize = (
       current = `${current}\n\n${rest}`
     }
     while (current.length > size) {
-      pushChunk(current.slice(0, size))
-      current = takeTail(current, overlap)
+      const emitted = current.slice(0, size)
+      pushChunk(emitted)
+      current = `${takeTail(emitted, overlap)}\n\n${current.slice(size)}`
     }
   }
   pushChunk(current)
@@ -127,7 +146,7 @@ const chunkStructured = (
 ): readonly Chunk[] => {
   const chunks = splitHeadings(body, options, rootTitle)
   if (chunks.length > 0) return chunks
-  return wrapChunks(chunkBody(body))
+  return chunkBySize(body, options)
 }
 
 export const chunkForFormat = (

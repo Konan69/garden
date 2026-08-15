@@ -49,6 +49,15 @@ export const postBrainFileUpload = async ({
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
 
+  const env = appContext.env as AppEnv & {
+    HELIX_URL?: string
+    HELIX_API_KEY?: string
+  }
+  const helixUrl = env.HELIX_URL
+  if (helixUrl === undefined) {
+    return badRequest('Brain is not configured (missing HELIX_URL)')
+  }
+
   const formResult = await Result.tryPromise({
     try: async () => await request.formData(),
     catch: (cause) =>
@@ -91,15 +100,6 @@ export const postBrainFileUpload = async ({
   })
   if (putResult.isErr()) return badRequest(putResult.error.message)
 
-  const env = appContext.env as AppEnv & {
-    HELIX_URL?: string
-    HELIX_API_KEY?: string
-  }
-  const helixUrl = env.HELIX_URL
-  if (helixUrl === undefined) {
-    return badRequest('Brain is not configured (missing HELIX_URL)')
-  }
-
   const brainLive = makeWebBrainLive({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
@@ -128,7 +128,7 @@ export const postBrainFileUpload = async ({
     })
     if (added.r2Key !== undefined && added.r2Key !== r2Key) {
       yield* Effect.tryPromise(async () => {
-        await env.FILES.delete(added.r2Key)
+        await env.FILES.delete(r2Key)
       }).pipe(Effect.ignore)
     }
     return added
@@ -136,6 +136,7 @@ export const postBrainFileUpload = async ({
 
   const addItemResult = await Effect.runPromise(Effect.result(addItemEffect))
   if (EffectResult.isFailure(addItemResult)) {
+    await env.FILES.delete(r2Key).catch(() => undefined)
     return badRequest(addItemResult.failure.message)
   }
   const added = addItemResult.success
@@ -146,7 +147,10 @@ export const postBrainFileUpload = async ({
       Effect.gen(function* () {
         const brain = yield* Brain
         yield* brain.ensureIndexes()
-        return yield* brain.index(added.id)
+        return yield* brain.index(
+          added.id,
+          WorkspaceId.make(workspaceContext.workspaceId),
+        )
       }).pipe(
         Effect.provide(brainLive),
         Effect.catch((failure) => {

@@ -29,6 +29,18 @@ export const makeWorkersAiEmbeddings = (
           const result = (await ai.run(WORKERS_AI_MODEL, {
             text: texts as string[],
           })) as { readonly data: number[][] }
+          if (
+            !Array.isArray(result.data) ||
+            result.data.length !== texts.length ||
+            !result.data.every(
+              (vector) =>
+                Array.isArray(vector) &&
+                vector.length === EMBEDDING_DIM &&
+                vector.every((value) => Number.isFinite(value)),
+            )
+          ) {
+            throw new Error('unexpected embedding response shape')
+          }
           return result.data
         },
         catch: (cause) =>

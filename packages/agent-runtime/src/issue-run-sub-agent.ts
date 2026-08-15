@@ -376,6 +376,15 @@ export class IssueRunSubAgent extends Think<AgentRuntimeEnv> {
             : { helixApiKey: this.env.HELIX_API_KEY }),
           ai: this.env.AI,
           files: this.env.FILES,
+          getContext: () => {
+            const run = this.currentRunState
+            if (run === null) return null
+            return {
+              workspaceId: run.workspaceId,
+              agentId: run.agentId,
+              runId: run.runId,
+            }
+          },
         },
       }),
       update_plan: createUpdatePlanTool(context),

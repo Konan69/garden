@@ -14,6 +14,11 @@ export type QueryResponse = typeof QueryResponseSchema.Type
 
 const PLANNER_ERROR = 'unsupported cascades plan'
 
+const REQUEST_TIMEOUT = '15 seconds'
+
+const queryUrl = (baseUrl: string): string =>
+  new URL('v2/query', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString()
+
 export type RunOptions = {
   readonly awaitDurability?: boolean
 }
@@ -49,7 +54,7 @@ const runOnce = (
       headers['x-helix-await-durable'] = 'true'
     }
     const response = yield* http.execute(
-      HttpClientRequest.post(new URL('/v2/query', baseUrl).toString(), {
+      HttpClientRequest.post(queryUrl(baseUrl), {
         body: HttpBody.uint8Array(request.toJsonBytes(), 'application/json'),
         headers,
       }),
@@ -69,11 +74,18 @@ const runOnce = (
     const parsed = parseJson(text)
     return yield* Schema.decodeUnknownEffect(QueryResponseSchema)(parsed)
   }).pipe(
-    Effect.mapError((error) =>
-      error instanceof HelixError || error instanceof WriteConflict
-        ? error
-        : new HelixError({ message: 'helix request failed', cause: error }),
-    ),
+    Effect.timeout(REQUEST_TIMEOUT),
+    Effect.mapError((error) => {
+      if (error instanceof HelixError || error instanceof WriteConflict) {
+        return error
+      }
+      if (error._tag === 'TimeoutError') {
+        return new HelixError({
+          message: `helix query timed out after ${REQUEST_TIMEOUT}`,
+        })
+      }
+      return new HelixError({ message: 'helix request failed', cause: error })
+    }),
   )
 
 const runWithRetry = (

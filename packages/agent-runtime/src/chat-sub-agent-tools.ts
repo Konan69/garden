@@ -41,7 +41,7 @@ import {
 } from './documents/document-artifact-model'
 import { createProposeAgentTool } from './agent-tools/propose-agent'
 import { createWebTools, type WebToolsSqlValue } from './agent-tools/web'
-import { createBrainTools } from './agent-tools/brain'
+import { createBrainTools, type BrainToolContext } from './agent-tools/brain'
 import { listAvailableConnectorBindings } from '@garden/server/connectors/availability'
 import { createSandboxTools } from './sandbox-tools'
 import {
@@ -80,6 +80,7 @@ type ChatSubAgentToolsInput = {
     helixApiKey?: string
     ai: Ai
     files: R2Bucket
+    getContext?: () => BrainToolContext | null | Promise<BrainToolContext | null>
   }
 }
 
@@ -1779,7 +1780,7 @@ export function createChatSubAgentTools({
       },
       ai: brain.ai,
       files: brain.files,
-      getContext: async () => {
+      getContext: brain.getContext ?? (async () => {
         if (!databaseUrl || !threadId) return null
         const threadResult = await loadChatThreadContext({
           databaseUrl,
@@ -1791,7 +1792,7 @@ export function createChatSubAgentTools({
           agentId: threadResult.value.agentId,
           runId: threadResult.value.threadId,
         }
-      },
+      }),
     }),
 
     // Client-side tool — no execute function. The UI renders an interactive

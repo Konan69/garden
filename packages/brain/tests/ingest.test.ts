@@ -23,7 +23,7 @@ layer(withTestConfig(FullLive), { excludeTestServices: true })('ingest', (it) =>
           Effect.gen(function* () {
             for (const page of pages) {
               const noteId = yield* brain.addItem(page.note)
-              yield* brain.index(noteId.id)
+              yield* brain.index(noteId.id, workspaceId)
             }
           })
         yield* ingestAll()
@@ -46,6 +46,7 @@ layer(withTestConfig(FullLive), { excludeTestServices: true })('ingest', (it) =>
         expect(sections.map((section) => section.label).sort()).toEqual([
           'Nodes and edges',
           'Query model',
+          'helixdb',
         ])
 
         const hybrid = yield* brain.search({
@@ -104,7 +105,7 @@ layer(withTestConfig(FullLive), { excludeTestServices: true })('ingest', (it) =>
 
         for (const page of pages) {
           const noteId = yield* brain.addItem(page.note)
-          yield* brain.index(noteId.id)
+          yield* brain.index(noteId.id, workspaceId)
         }
 
         const xlsxNote = yield* brain.addItem(xlsx.note)

@@ -19,10 +19,21 @@ export class RawFileStore extends Context.Service<
   RawFileStoreShape
 >()('@garden/brain/RawFileStore') {}
 
+const normalizeRange = (
+  range: ReadRange | undefined,
+): { readonly start: number; readonly length: number } | undefined => {
+  if (range === undefined) return undefined
+  const start = Math.max(0, Math.trunc(range.start))
+  const length = Math.trunc(range.end) - start + 1
+  return { start, length: Math.max(0, length) }
+}
+
 const slice = (bytes: Uint8Array, range: ReadRange | undefined) => {
   if (range === undefined) return bytes
-  const start = Math.max(0, range.start)
-  const end = Math.min(bytes.length, range.end + 1)
+  const normalized = normalizeRange(range)
+  if (normalized === undefined) return bytes
+  const start = Math.min(normalized.start, bytes.length)
+  const end = Math.min(bytes.length, start + normalized.length)
   if (start >= end) return new Uint8Array(0)
   return bytes.slice(start, end)
 }
@@ -62,13 +73,17 @@ export function makeR2RawFileStoreLive(bucket: R2BucketLike): Layer.Layer<RawFil
       read: (key, range) =>
         Effect.tryPromise({
           try: async () => {
+            const normalized = normalizeRange(range)
+            if (normalized !== undefined && normalized.length === 0) {
+              return new Uint8Array(0)
+            }
             const object =
-              range === undefined
+              normalized === undefined
                 ? await bucket.get(key)
                 : await bucket.get(key, {
                     range: {
-                      offset: range.start,
-                      length: range.end - range.start + 1,
+                      offset: normalized.start,
+                      length: normalized.length,
                     },
                   })
             if (object === null) {

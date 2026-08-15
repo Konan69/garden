@@ -26,6 +26,7 @@
       "DATABASE_URL",
       "ENVIRONMENT",
       "EXECUTOR_SECRET_KEY",
+      "HELIX_URL",
       "HELIX_API_KEY",
     ],
   },
@@ -119,7 +120,6 @@
     "SANDBOX_TRANSPORT": "rpc",
     "SANDBOX_LOG_LEVEL": "warn",
     "GARDEN_LOG_LEVEL": "warn",
-    "HELIX_URL": "http://localhost:6968",
   },
   "migrations": [
     {
