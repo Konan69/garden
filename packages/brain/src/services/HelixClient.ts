@@ -1,9 +1,5 @@
 import { Context, Effect, Layer, Schema } from 'effect'
-import {
-  HttpBody,
-  HttpClient,
-  HttpClientRequest,
-} from 'effect/unstable/http'
+import { HttpBody, HttpClient, HttpClientRequest } from 'effect/unstable/http'
 import { FetchHttpClient } from 'effect/unstable/http'
 import { parseJson } from '@helix-db/helix-db'
 import type { QueryRequest } from '@helix-db/helix-db'
@@ -13,11 +9,7 @@ const QueryResponseSchema = Schema.Record(Schema.String, Schema.Unknown)
 export type QueryResponse = typeof QueryResponseSchema.Type
 
 const PLANNER_ERROR = 'unsupported cascades plan'
-
-const REQUEST_TIMEOUT = '15 seconds'
-
-const queryUrl = (baseUrl: string): string =>
-  new URL('v2/query', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString()
+const REQUEST_TIMEOUT = '30 seconds'
 
 export type RunOptions = {
   readonly awaitDurability?: boolean
@@ -40,6 +32,25 @@ const isPlannerError = (error: HelixError | WriteConflict): boolean =>
   error.status === 400 &&
   error.message.includes(PLANNER_ERROR)
 
+/**
+ * Resolves Helix's query route beneath any configured base path. Previously an
+ * absolute `/v2/query` discarded prefixes used by hosted gateways; URL parsing
+ * follows the platform URL implementation and clears base query/fragment data.
+ */
+const resolveQueryUrl = (baseUrl: string): string => {
+  const url = new URL(baseUrl)
+  url.pathname = `${url.pathname.replace(/\/$/, '')}/v2/query`
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
+/**
+ * Executes one Helix HTTP request with a bounded end-to-end deadline. Before,
+ * a stalled fetch or response body could hold a worker indefinitely; the
+ * 30-second bound matches Garden's established outbound connector HTTP bound.
+ * Effect timeout interrupts the FetchHttpClient request and maps it to HelixError.
+ */
 const runOnce = (
   baseUrl: string,
   apiKey: string | undefined,
@@ -48,13 +59,18 @@ const runOnce = (
   options: RunOptions | undefined,
 ) =>
   Effect.gen(function* () {
+    const url = yield* Effect.try({
+      try: () => resolveQueryUrl(baseUrl),
+      catch: (cause) =>
+        new HelixError({ message: 'invalid Helix base URL', cause }),
+    })
     const headers: Record<string, string> = {}
     if (apiKey !== undefined) headers['authorization'] = `Bearer ${apiKey}`
     if (options?.awaitDurability === true) {
       headers['x-helix-await-durable'] = 'true'
     }
     const response = yield* http.execute(
-      HttpClientRequest.post(queryUrl(baseUrl), {
+      HttpClientRequest.post(url, {
         body: HttpBody.uint8Array(request.toJsonBytes(), 'application/json'),
         headers,
       }),
