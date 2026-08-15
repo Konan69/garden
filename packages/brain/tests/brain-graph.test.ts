@@ -136,13 +136,9 @@ it.effect(
       })
 
       expect(updated.kind).toBe(Kind.make('partner-brief'))
-      expect(updated.summary).toBe(
-        'Acme partnership plan and named owners.',
-      )
+      expect(updated.summary).toBe('Acme partnership plan and named owners.')
       expect(updated.indexed).toBe(true)
-      expect(updated.body).toBe(
-        'Acme and Alice will launch the Atlas project.',
-      )
+      expect(updated.body).toBe('Acme and Alice will launch the Atlas project.')
       expect(calls).toHaveLength(2)
       expect(calls[0]?.options?.awaitDurability).toBe(true)
       const request = calls[0]?.request.toJsonString() ?? ''
