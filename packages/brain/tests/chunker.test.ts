@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@effect/vitest'
-import { chunkBySize, chunkForFormat, splitHeadings } from '../src/services/Chunker.ts'
+import {
+  chunkBySize,
+  chunkForFormat,
+  splitHeadings,
+} from '../src/services/Chunker.ts'
 
 describe('splitHeadings', () => {
   it('splits markdown bodies on headings', () => {
@@ -43,10 +47,10 @@ describe('splitHeadings', () => {
 
   it('carries the chain across oversize sections with unique paths', () => {
     const longBody = 'alpha beta gamma delta epsilon zeta eta theta '.repeat(30)
-    const chunks = splitHeadings(
-      `# Doc\n## Big\n${longBody}`,
-      { size: 100, overlap: 20 },
-    )
+    const chunks = splitHeadings(`# Doc\n## Big\n${longBody}`, {
+      size: 100,
+      overlap: 20,
+    })
     expect(chunks.length).toBeGreaterThan(2)
     expect(chunks[1]?.title).toBe('Big')
     expect(chunks[1]?.path).toBe('Doc > Big')
@@ -63,6 +67,15 @@ describe('splitHeadings', () => {
     expect(chunks[1]?.body).toBe('Doc > Empty')
     expect(chunks[2]?.body).toBe('Doc > Next\n\ncontent')
   })
+
+  it('keeps text before the first heading as a preamble chunk', () => {
+    const chunks = splitHeadings(
+      'Context that applies to every section.\n\n## Details\nsection body',
+    )
+    expect(chunks.map((chunk) => chunk.title)).toEqual(['Preamble', 'Details'])
+    expect(chunks[0]?.body).toContain('Context that applies to every section.')
+    expect(chunks[1]?.body).toContain('section body')
+  })
 })
 
 describe('chunkBySize', () => {
@@ -73,7 +86,9 @@ describe('chunkBySize', () => {
   })
 
   it('splits long bodies into multiple chunks with overlap', () => {
-    const paragraph = 'alpha beta gamma delta epsilon zeta eta theta '.repeat(20)
+    const paragraph = 'alpha beta gamma delta epsilon zeta eta theta '.repeat(
+      20,
+    )
     const chunks = chunkBySize(paragraph, { size: 100, overlap: 20 })
     expect(chunks.length).toBeGreaterThan(1)
     const joined = chunks.map((chunk) => chunk.body).join(' ')
@@ -83,10 +98,24 @@ describe('chunkBySize', () => {
   })
 
   it('numbers chunks sequentially', () => {
-    const paragraph = 'alpha beta gamma delta epsilon zeta eta theta '.repeat(20)
+    const paragraph = 'alpha beta gamma delta epsilon zeta eta theta '.repeat(
+      20,
+    )
     const chunks = chunkBySize(paragraph, { size: 100, overlap: 20 })
     expect(chunks.map((chunk) => chunk.title)).toEqual(
       chunks.map((_, i) => `Part ${i + 1}`),
+    )
+  })
+
+  it('keeps the remainder of an oversized paragraph', () => {
+    const terminalMarker = 'terminal-content-marker'
+    const chunks = chunkBySize(
+      `${'oversized paragraph content '.repeat(20)}${terminalMarker}`,
+      { size: 80, overlap: 12 },
+    )
+    expect(chunks.length).toBeGreaterThan(2)
+    expect(chunks.some((chunk) => chunk.body.includes(terminalMarker))).toBe(
+      true,
     )
   })
 })
@@ -116,5 +145,15 @@ describe('chunkForFormat', () => {
     })
     expect(txt.length).toBeGreaterThan(1)
     expect(txt[0]?.title).toBe('Part 1')
+  })
+
+  it('honors size options for structured text without headings', () => {
+    const chunks = chunkForFormat(
+      'markdown',
+      'heading-free structured content '.repeat(20),
+      { size: 60, overlap: 10 },
+    )
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.every((chunk) => chunk.body.length <= 60)).toBe(true)
   })
 })

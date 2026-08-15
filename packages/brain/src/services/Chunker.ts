@@ -25,6 +25,11 @@ const headingInfo = (
 const breadcrumbBody = (path: string, body: string): string =>
   body === '' ? path : `${path}\n\n${body}`
 
+/**
+ * Splits structured documents without discarding text before the first heading.
+ * Previously that preamble vanished; it now becomes a breadcrumbed chunk when
+ * the document also contains headings, while heading-free input uses fallback.
+ */
 export const splitHeadings = (
   body: string,
   options: ChunkOptions = DEFAULT_OPTIONS,
@@ -99,13 +104,20 @@ const takeTail = (text: string, overlap: number): string => {
   return tail
 }
 
+/**
+ * Chunks every paragraph byte range while retaining bounded word overlap.
+ * Previously an oversized paragraph emitted its prefix then replaced the
+ * remainder with overlap text, silently dropping all later content.
+ */
 export const chunkBySize = (
   body: string,
   options: ChunkOptions = DEFAULT_OPTIONS,
 ): readonly Chunk[] => {
   const { size, overlap } = options
   if (size <= 0 || overlap < 0 || overlap >= size) {
-    throw new Error('chunk size must be positive and overlap must satisfy 0 <= overlap < size')
+    throw new Error(
+      'chunk size must be positive and overlap must satisfy 0 <= overlap < size',
+    )
   }
   const paragraphs = chunkBody(body)
   const chunks: Chunk[] = []
@@ -115,24 +127,30 @@ export const chunkBySize = (
       chunks.push({ title: `Part ${chunks.length + 1}`, body: text })
   }
   for (const paragraph of paragraphs) {
-    let rest = paragraph
     while (
       current !== '' &&
-      current.length + rest.length + 2 > size &&
+      current.length + paragraph.length + 2 > size &&
       current.length < size
     ) {
       pushChunk(current)
       current = takeTail(current, overlap)
     }
     if (current === '') {
-      current = rest
+      current = paragraph
     } else {
-      current = `${current}\n\n${rest}`
+      current = `${current}\n\n${paragraph}`
     }
     while (current.length > size) {
       const emitted = current.slice(0, size)
+      const remainder = current.slice(size)
       pushChunk(emitted)
-      current = `${takeTail(emitted, overlap)}\n\n${current.slice(size)}`
+      const tail = takeTail(emitted, overlap)
+      current =
+        tail === ''
+          ? remainder
+          : remainder === ''
+            ? tail
+            : `${tail}\n\n${remainder}`
     }
   }
   pushChunk(current)
@@ -172,17 +190,14 @@ export type ChunkerShape = {
   ) => Effect.Effect<readonly Chunk[], never>
 }
 
-export class Chunker extends Context.Service<
-  Chunker,
-  ChunkerShape
->()('@garden/brain/Chunker') {}
+export class Chunker extends Context.Service<Chunker, ChunkerShape>()(
+  '@garden/brain/Chunker',
+) {}
 
 export const ChunkerLive = Layer.succeed(
   Chunker,
   Chunker.of({
     chunk: (doc, options) =>
-      Effect.succeed(
-        chunkForFormat(doc.format, doc.body, options, doc.title),
-      ),
+      Effect.succeed(chunkForFormat(doc.format, doc.body, options, doc.title)),
   }),
 )
