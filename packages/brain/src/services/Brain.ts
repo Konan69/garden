@@ -23,7 +23,12 @@ import {
   WorkspaceId,
 } from '../domain/items.ts'
 import type { SearchHit } from '../domain/items.ts'
-import { EmbedError, ExtractError, HelixError, WriteConflict } from '../errors.ts'
+import {
+  EmbedError,
+  ExtractError,
+  HelixError,
+  WriteConflict,
+} from '../errors.ts'
 import {
   EDGES,
   LABELS,
@@ -56,7 +61,10 @@ export type BrainShape = {
   readonly index: (
     itemId: ItemId,
     tenantId: WorkspaceId,
-  ) => Effect.Effect<BrainItem, HelixError | WriteConflict | EmbedError | ExtractError>
+  ) => Effect.Effect<
+    BrainItem,
+    HelixError | WriteConflict | EmbedError | ExtractError
+  >
   readonly read: (
     id: ItemId,
     tenantId: WorkspaceId,
@@ -65,7 +73,10 @@ export type BrainShape = {
     tenantId: WorkspaceId
     query: string
     k: number
-  }) => Effect.Effect<readonly SearchHit[], HelixError | WriteConflict | EmbedError>
+  }) => Effect.Effect<
+    readonly SearchHit[],
+    HelixError | WriteConflict | EmbedError
+  >
   readonly linkSections: (
     fileId: ItemId,
     sectionIds: readonly ItemId[],
@@ -119,10 +130,8 @@ const firstRow = (
   name: string,
 ): Row | undefined => toRows(result[name])[0]
 
-const rows = (
-  result: Record<string, unknown>,
-  name: string,
-): readonly Row[] => toRows(result[name])
+const rows = (result: Record<string, unknown>, name: string): readonly Row[] =>
+  toRows(result[name])
 
 const nodeId = (itemId: ItemId): number => Number(itemId)
 
@@ -283,6 +292,22 @@ const embedBatched = (
     return vectors
   })
 
+/**
+ * Maps caller-facing kinds onto the three labels covered by Brain indexes.
+ * Previously arbitrary kinds became Helix labels and disappeared from search;
+ * now kind remains metadata while storage stays on file, section, or note.
+ */
+const storageLabelOf = (item: NewBrainItem): string => {
+  if (item.kind === LABELS.File) return LABELS.File
+  if (item.kind === LABELS.Section) return LABELS.Section
+  return LABELS.Note
+}
+
+/**
+ * Combines ranked result lists with reciprocal-rank fusion. Previously the
+ * fused value only sorted hits and callers received a raw source-list score;
+ * each returned hit now exposes the score that actually determined its rank.
+ */
 const fuse = (
   lists: readonly (readonly SearchHit[])[],
   limit: number,
@@ -345,6 +370,36 @@ const readItem = (
     return yield* decodeRow(row)
   })
 
+/**
+ * Selects sections linked to one item that are absent from its latest chunk
+ * source keys. Helix's traversal `drop` removes stale nodes and their edges;
+ * when chunks have no canonical keys, all old linked sections are replaced.
+ */
+const staleSectionsOf = (
+  item: BrainItem,
+  currentSourceKeys: readonly string[],
+): Traversal<'nodes', 'write'> => {
+  const linkedSections = g()
+    .n([nodeId(item.id)])
+    .where(Predicate.eq(PROPS.tenantId, item.tenantId))
+    .out(EDGES.hasSection)
+  const staleSections =
+    currentSourceKeys.length === 0
+      ? linkedSections
+      : linkedSections.where(
+          Predicate.not(
+            Predicate.isIn(SOURCE_KEY_PROP, [...currentSourceKeys]),
+          ),
+        )
+  return staleSections.drop()
+}
+
+/**
+ * Builds the Effect-native Brain service over Helix, embeddings, extraction,
+ * chunking, and raw storage. The service now keeps storage labels indexed,
+ * invalidates changed bodies, prunes stale sections, and logs fused rankings.
+ * Helix traversal behavior was verified against the installed v3 SDK source.
+ */
 export const makeBrain = Effect.gen(function* () {
   const helix = yield* HelixClient
   const embeddings = yield* Embeddings
@@ -445,23 +500,23 @@ export const makeBrain = Effect.gen(function* () {
             const id = row.operation_id
             return typeof id === 'string' ? [id] : []
           })
-        yield* Effect.forEach(
-          operationIds,
-          (id) => waitForIndex(helix, id),
-          { concurrency: 'unbounded' },
-        )
+        yield* Effect.forEach(operationIds, (id) => waitForIndex(helix, id), {
+          concurrency: 'unbounded',
+        })
       }),
     addItem: (input) =>
       Effect.gen(function* () {
         const item = yield* Effect.try({
           try: () => Schema.decodeUnknownSync(NewBrainItem)(input),
-          catch: (cause) => new HelixError({ message: 'invalid brain item', cause }),
+          catch: (cause) =>
+            new HelixError({ message: 'invalid brain item', cause }),
         })
         const props = propsOf(item)
+        const storageLabel = storageLabelOf(item)
         const sourceKey = item.canonical?.value
         if (sourceKey === undefined) {
           const request = writeBatch()
-            .varAs('created', g().addN(item.kind, props))
+            .varAs('created', g().addN(storageLabel, props))
             .returning(['created'])
             .toQueryRequest({ queryName: QUERY.index })
           const result = yield* retryWriteConflict(helix.run(request))
@@ -486,7 +541,7 @@ export const makeBrain = Effect.gen(function* () {
             'existing',
             g()
               .nWithLabelWhere(
-                item.kind,
+                storageLabel,
                 SourcePredicate.eq(SOURCE_KEY_PROP, sourceKey),
               )
               .where(Predicate.eq(PROPS.tenantId, item.tenantId)),
@@ -494,13 +549,16 @@ export const makeBrain = Effect.gen(function* () {
           .varAsIf(
             'created',
             BatchCondition.varEmpty('existing'),
-            g().addN(item.kind, props),
+            g().addN(storageLabel, props),
           )
           .varAsIf(
             'updated',
             BatchCondition.varNotEmpty('existing'),
             setProperties(
-              g().n(NodeRef.var('existing')) as unknown as Traversal<'nodes', 'write'>,
+              g().n(NodeRef.var('existing')) as unknown as Traversal<
+                'nodes',
+                'write'
+              >,
               propsWithoutR2Key(props),
             ).setProperty(PROPS.indexed, false),
           )
@@ -541,7 +599,7 @@ export const makeBrain = Effect.gen(function* () {
           [PROPS.indexed]: true,
         }
         const request = writeBatch()
-          .varAs('created', g().addN(LABELS.Note, props))
+          .varAs('created', g().addN(storageLabelOf(item), props))
           .returning(['created'])
           .toQueryRequest({ queryName: QUERY.index })
         const result = yield* retryWriteConflict(
@@ -621,10 +679,7 @@ export const makeBrain = Effect.gen(function* () {
           }
           return {
             section,
-            props: propsWithEmbedding(
-              section,
-              sectionVectors[i] as number[],
-            ),
+            props: propsWithEmbedding(section, sectionVectors[i] as number[]),
           }
         })
 
@@ -668,10 +723,9 @@ export const makeBrain = Effect.gen(function* () {
         const fileUpdate = setProperties(
           g()
             .n([nodeId(item.id)])
-            .where(Predicate.eq(PROPS.tenantId, item.tenantId)) as unknown as Traversal<
-            'nodes',
-            'write'
-          >,
+            .where(
+              Predicate.eq(PROPS.tenantId, item.tenantId),
+            ) as unknown as Traversal<'nodes', 'write'>,
           fileProps,
         ).setProperty(PROPS.indexed, true)
 
@@ -746,6 +800,17 @@ export const makeBrain = Effect.gen(function* () {
           return idOfRow({ ...row, $id: row.$id ?? row.id })
         })
 
+        const currentSourceKeys = sectionEntries
+          .map((entry) => entry.section.canonical?.value)
+          .filter((sourceKey): sourceKey is string => sourceKey !== undefined)
+        const staleRequest = writeBatch()
+          .varAs('stale_sections', staleSectionsOf(item, currentSourceKeys))
+          .returning(['stale_sections'])
+          .toQueryRequest({ queryName: QUERY.index })
+        yield* retryWriteConflict(
+          helix.run(staleRequest, { awaitDurability: true }),
+        )
+
         let edgeBatch = writeBatch().varAs(
           'file',
           g()
@@ -764,9 +829,11 @@ export const makeBrain = Effect.gen(function* () {
             .varAsIf(
               `edge${i}`,
               BatchCondition.varEmpty(`already${i}`),
-              g().n(NodeRef.var('file')).addE(EDGES.hasSection, [nodeId(sectionId)], {
-                [PROPS.tenantId]: item.tenantId,
-              }),
+              g()
+                .n(NodeRef.var('file'))
+                .addE(EDGES.hasSection, [nodeId(sectionId)], {
+                  [PROPS.tenantId]: item.tenantId,
+                }),
             )
         })
         const edgeRequest = edgeBatch
@@ -788,7 +855,12 @@ export const makeBrain = Effect.gen(function* () {
     read: (id, tenantId) =>
       Effect.gen(function* () {
         const request = readBatch()
-          .varAs('item', g().n([nodeId(id)]).valueMap(itemProps()))
+          .varAs(
+            'item',
+            g()
+              .n([nodeId(id)])
+              .valueMap(itemProps()),
+          )
           .returning(['item'])
           .toQueryRequest({ queryName: QUERY.read })
         const result = yield* helix.run(request)
@@ -902,7 +974,18 @@ export const makeBrain = Effect.gen(function* () {
               concurrency: 'unbounded',
             }),
         )
-        return fuse(lists, k)
+        const hits = fuse(lists, k)
+        yield* Effect.logDebug('Brain.search.completed').pipe(
+          Effect.annotateLogs({
+            query,
+            hitCount: hits.length,
+            topHits: hits.slice(0, 5).map((hit) => ({
+              itemId: hit.item.id,
+              fusedScore: hit.score,
+            })),
+          }),
+        )
+        return hits
       }),
     linkSections: (fileId, sectionIds, tenantId) =>
       Effect.gen(function* () {
@@ -924,9 +1007,11 @@ export const makeBrain = Effect.gen(function* () {
             .varAsIf(
               `edge${i}`,
               BatchCondition.varEmpty(`already${i}`),
-              g().n(NodeRef.var('file')).addE(EDGES.hasSection, [nodeId(sectionId)], {
-                [PROPS.tenantId]: tenantId,
-              }),
+              g()
+                .n(NodeRef.var('file'))
+                .addE(EDGES.hasSection, [nodeId(sectionId)], {
+                  [PROPS.tenantId]: tenantId,
+                }),
             )
         })
         const request = batch
