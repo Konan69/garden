@@ -32,23 +32,27 @@ skills, and keep technical work tied to shared tasks.
 
 ## Run Garden locally
 
-Garden runs locally in two modes. **Standard mode** (`pnpm dev`) keeps the web
-app and Cloudflare's local D1, R2, Durable Object, and Workflow simulators on
-your machine and uses Cloudflare's remote Workers AI binding for the model —
-it needs a Cloudflare account. **Offline mode** (`pnpm dev:offline`) needs no
-Cloudflare account at all: model calls go to Ollama (or any OpenAI-compatible
-endpoint) — see [Offline mode](#offline-mode-no-cloudflare-account).
+Garden runs locally in two modes:
 
-Both modes use the dockerized local Postgres from `pnpm offline:up` as the
-recommended database: a fresh, private instance that migrations can own.
+- **Offline mode** (`pnpm dev:offline`) — the recommended first run. No
+  Cloudflare account, no sign-ups: the model runs on your machine through
+  [Ollama](https://ollama.com), and everything else (database, storage,
+  agents) is local too.
+- **Standard mode** (`pnpm dev`) — the same local app, but model calls go to
+  Cloudflare Workers AI. Needs a Cloudflare account on the Workers paid plan.
+
+Both modes share the same setup through step 2, and both use the dockerized
+local Postgres as the recommended database — a fresh, private instance that
+migrations can own.
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 22.12 or newer
-- pnpm 10.33.0; Corepack is the simplest way to install the pinned version
-- Docker, for the local Postgres (also used by the full test suite and
-  Sandbox-container mode)
-- A Cloudflare account for Workers AI — standard mode only
+- pnpm 10.33.0 — `corepack enable` installs the pinned version for you in
+  step 1
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any
+  Docker engine) — runs the local Postgres, and optionally the local model
+- A Cloudflare account — **standard mode only**; skip it for offline mode
 
 ### 1. Clone and install
 
@@ -61,105 +65,69 @@ corepack install
 pnpm install --frozen-lockfile
 ```
 
-The repository pins pnpm 10.33.0 through the `packageManager` field in
-`package.json`.
-
-### 2. Sign in to Cloudflare
-
-```bash
-pnpm --filter @garden/web exec wrangler login
-pnpm --filter @garden/web exec wrangler whoami
-```
-
-Copy the Account ID reported by `wrangler whoami`; it becomes
-`CLOUDFLARE_ACCOUNT_ID` in the next step.
-
-### 3. Configure the environment
+### 2. Create your environment file
 
 ```bash
 cp .env.example .env
 ```
 
-Fill in these required values in the root `.env` file:
-
-| Variable                | What to use                                                   |
-| ----------------------- | ------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | Account ID from `wrangler whoami`                              |
-| `DATABASE_URL`          | `postgresql://garden:garden@localhost:55432/garden` for the local Docker Postgres (`pnpm offline:up`); any dedicated Postgres (e.g. [Neon](https://neon.tech)) also works |
-| `BETTER_AUTH_SECRET`    | A high-entropy secret of at least 32 characters                |
-| `EXECUTOR_SECRET_KEY`   | A second, separate high-entropy secret for connector execution |
-
-Generate the two secrets separately; do not reuse one value:
+Then fill in the two required secrets in `.env`. Generate each one separately
+(run the command twice; don't reuse one value):
 
 ```bash
 openssl rand -base64 32
 ```
 
-`BETTER_AUTH_URL=http://localhost:3000` and `ENVIRONMENT=development` already
-have local defaults in `.env.example`. PostHog values are optional locally but
-required for deployment. Connector credentials are needed only for the
-providers you choose to configure.
+| Variable              | What to use                                          |
+| --------------------- | ---------------------------------------------------- |
+| `BETTER_AUTH_SECRET`  | First generated value                                |
+| `EXECUTOR_SECRET_KEY` | Second generated value                               |
 
-### 4. Migrate and start
+Everything else already has a working local default: `DATABASE_URL` points at
+the local Docker Postgres from step 3, and `BETTER_AUTH_URL` /
+`ENVIRONMENT` are preset. Connector and PostHog credentials are only needed
+for features you explicitly configure.
+
+That's all the configuration offline mode needs. For standard mode you will
+also fill in `CLOUDFLARE_ACCOUNT_ID` — covered below.
+
+### 3. Offline mode — no Cloudflare account
+
+First, get a local model running. Pick one of these:
+
+**Option A — Ollama in Docker** (no extra installs):
 
 ```bash
-pnpm offline:up                        # local Postgres (skip if you use your own)
-pnpm --filter @garden/db db:migrate
-pnpm dev
+pnpm offline:up:ollama                                    # starts Postgres + Ollama
+docker compose -f compose.dev.yaml exec ollama ollama pull qwen3:8b
 ```
 
-Open [http://localhost:3000](http://localhost:3000), create an account, then
-create a workspace. Use that signup-to-workspace flow as a manual first-run
-check; Garden does not yet expose a dedicated health endpoint.
-
-`pnpm dev` starts:
-
-- the TanStack Start app on port 3000;
-- local D1, R2, Durable Object, and Workflow state through the Workers
-  simulator;
-- Hyperdrive pointed at `DATABASE_URL`; and
-- the remote Workers AI binding, which may incur usage on your Cloudflare
-  account.
-
-### Troubleshooting
-
-**Workers AI fails to start:** run `wrangler whoami` again and check that
-`CLOUDFLARE_ACCOUNT_ID` in `.env` belongs to the authenticated account.
-
-**Database migrations fail:** confirm the database exists, the connection
-string includes any connection options required by your provider, and the user
-can create and alter tables. Then rerun
-`pnpm --filter @garden/db db:migrate`.
-
-**A connector is unavailable:** provider credentials are optional. Add only the
-matching variables from `.env.example`, then restart the development process.
-
-**The full test suite cannot start Postgres:** start Docker first. Database
-tests use Testcontainers and pull `postgres:16-alpine` on the first run.
-
-**Port 3000 is already in use:** stop the process that owns the port. The
-`pnpm dev:reset` helper uses broad process-name matching on macOS and Linux and
-may stop unrelated Vite, Workerd, or esbuild processes, so use it deliberately.
-
-### Offline mode (no Cloudflare account)
-
-`pnpm dev:offline` runs the entire product with zero Cloudflare setup: no
-account, no `wrangler login`, no workers.dev subdomain, no
-`CLOUDFLARE_ACCOUNT_ID`. Remote bindings are disabled, so the Workers AI
-binding is never contacted — model calls go to an OpenAI-compatible endpoint
-instead (Ollama by default).
+**Option B — the Ollama app** (recommended on Apple Silicon: Docker
+containers can't use the Mac GPU, so the native app is much faster):
 
 ```bash
-cp .env.example .env         # fill in BETTER_AUTH_SECRET and EXECUTOR_SECRET_KEY only
-pnpm offline:up:ollama       # local Postgres + Ollama (or `pnpm offline:up` if Ollama runs natively)
-docker compose -f compose.dev.yaml exec ollama ollama pull qwen3:8b
+# install from https://ollama.com, then:
+ollama pull qwen3:8b
+pnpm offline:up                                           # starts Postgres only
+```
+
+Heads up: `qwen3:8b` is a one-time **~5 GB download**, and the Docker images
+on the first `pnpm offline:up` add a few hundred MB more. On a slow
+connection, start the pull and get coffee.
+
+Then migrate the database and start the app:
+
+```bash
 pnpm --filter @garden/db db:migrate
 pnpm dev:offline
 ```
 
-Then open [http://localhost:3000](http://localhost:3000) and sign up. The
-model endpoint is configurable — any OpenAI-compatible API works, including
-hosted ones when you want stronger models without a Cloudflare account:
+Open [http://localhost:3000](http://localhost:3000), create an account, then
+create a workspace. That signup-to-workspace flow is the first-run health
+check; if it works, everything works.
+
+The model is configurable — any OpenAI-compatible API works, including hosted
+ones when you want a stronger model without a Cloudflare account:
 
 | Variable                            | Default                        | Notes                                   |
 | ----------------------------------- | ------------------------------ | --------------------------------------- |
@@ -176,12 +144,66 @@ Offline limitations:
   tool calls. A hosted endpoint fixes this without any Cloudflare setup.
 - Automation browser runs are untested offline.
 
-Offline troubleshooting:
+### 4. Standard mode — Cloudflare Workers AI
 
-- **Model calls fail:** check `curl http://localhost:11434/v1/models` answers
-  and the model is pulled (`ollama list`).
-- **Postgres port conflict:** compose maps 55432 to avoid a system Postgres on
-  5432; override `DATABASE_URL` if 55432 is taken.
+Sign in to Cloudflare and note your Account ID:
+
+```bash
+pnpm --filter @garden/web exec wrangler login
+pnpm --filter @garden/web exec wrangler whoami
+```
+
+Copy the Account ID from `wrangler whoami` into `CLOUDFLARE_ACCOUNT_ID` in
+`.env`. Then:
+
+```bash
+pnpm offline:up                        # local Postgres (skip if already running)
+pnpm --filter @garden/db db:migrate    # skip if already migrated
+pnpm dev
+```
+
+`pnpm dev` starts the app on port 3000 with local D1, R2, Durable Object, and
+Workflow state, Hyperdrive pointed at `DATABASE_URL`, and the remote Workers
+AI binding. Two things to know about that binding:
+
+- it may incur usage on your Cloudflare account; and
+- the default model (`@cf/moonshotai/kimi-k2.7-code`) requires the Workers
+  **paid** plan — on the free plan, chat turns fail with a model-availability
+  error. Use offline mode if you don't have a paid plan.
+
+### Troubleshooting
+
+**Model calls fail in offline mode:** check the endpoint answers
+(`curl http://localhost:11434/v1/models`) and the model is pulled
+(`ollama list`, or
+`docker compose -f compose.dev.yaml exec ollama ollama list` for the Docker
+option).
+
+**Workers AI fails in standard mode:** run `wrangler whoami` again and check
+that `CLOUDFLARE_ACCOUNT_ID` in `.env` belongs to the authenticated account.
+If chat turns fail with a model-availability error, your account is on the
+Workers free plan (see above).
+
+**Database migrations fail:** confirm Docker is running and
+`pnpm offline:up` reports the Postgres container healthy, then rerun
+`pnpm --filter @garden/db db:migrate`. For a non-Docker database, check the
+connection string and that the user can create and alter tables.
+
+**Postgres port conflict:** the local Postgres maps port 55432 specifically
+to avoid a system Postgres on 5432; if 55432 is also taken, override
+`DATABASE_URL`.
+
+**A connector is unavailable:** provider credentials are optional. Add only
+the matching variables from `.env.example`, then restart the development
+process.
+
+**The full test suite cannot start Postgres:** start Docker first. Database
+tests use Testcontainers and pull `postgres:16-alpine` on the first run.
+
+**Port 3000 is already in use:** stop the process that owns the port. The
+`pnpm dev:reset` helper uses broad process-name matching on macOS and Linux
+and may stop unrelated Vite, Workerd, or esbuild processes, so use it
+deliberately.
 
 ### Sandbox-container mode
 
