@@ -70,16 +70,23 @@ export const splitHeadings = (
     })
   }
   return sections.flatMap((section) => {
-    if (section.body.length <= size) {
+    const combined = breadcrumbBody(section.path, section.body)
+    if (combined.length <= size) {
       return [
         {
           title: section.title,
-          body: breadcrumbBody(section.path, section.body),
+          body: combined,
           path: section.path,
         },
       ]
     }
-    return chunkBySize(section.body, options).map((part, i) => ({
+    const breadcrumbLength = section.path.length + 2
+    const bodySize = Math.max(1, size - breadcrumbLength)
+    const bodyOverlap = Math.min(options.overlap, bodySize - 1)
+    return chunkBySize(section.body, {
+      size: bodySize,
+      overlap: bodyOverlap,
+    }).map((part, i) => ({
       title: i === 0 ? section.title : `${section.title} (${i + 1})`,
       body: breadcrumbBody(section.path, part.body),
       path: i === 0 ? section.path : `${section.path} (${i + 1})`,

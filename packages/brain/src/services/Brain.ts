@@ -109,7 +109,7 @@ export type BrainShape = {
    * performs no entity resolution or creation so later passes can reinterpret
    * the corpus without re-reading source content.
    */
-  readonly recordMention: (input: {
+  readonly observeMention: (input: {
     tenantId: WorkspaceId
     itemId: ItemId
     span?: MentionSpan
@@ -581,7 +581,7 @@ export const makeBrain = Effect.gen(function* () {
    * kind); edge properties preserve exact text/span/origin append-only without
    * creating an entity or leaking a storage label into the agent's ontology.
    */
-  const recordMention = Effect.fn('Brain.recordMention')(function* (input: {
+  const observeMention = Effect.fn('Brain.observeMention')(function* (input: {
     tenantId: WorkspaceId
     itemId: ItemId
     span?: MentionSpan
@@ -637,7 +637,7 @@ export const makeBrain = Effect.gen(function* () {
           .addE(EDGES.mentions, NodeRef.var('source'), properties),
       )
       .returning(['source', 'recorded'])
-      .toQueryRequest({ queryName: QUERY.recordMention })
+      .toQueryRequest({ queryName: QUERY.observeMention })
     const result = yield* retryWriteConflict(
       helix.run(request, { awaitDurability: true }),
     )
@@ -648,7 +648,7 @@ export const makeBrain = Effect.gen(function* () {
     }
     if (firstRow(result, 'recorded') === undefined) {
       return yield* Effect.fail(
-        new HelixError({ message: 'recordMention returned no edge' }),
+        new HelixError({ message: 'observeMention returned no edge' }),
       )
     }
     return {
@@ -1204,10 +1204,7 @@ export const makeBrain = Effect.gen(function* () {
         )
         const orphanIds = existingRows.flatMap((row) => {
           const canonical = row.canonical_value
-          if (
-            typeof canonical === 'string' &&
-            newSourceKeys.has(canonical)
-          ) {
+          if (typeof canonical === 'string' && newSourceKeys.has(canonical)) {
             return []
           }
           return [idOfRow(row)]
@@ -1273,7 +1270,9 @@ export const makeBrain = Effect.gen(function* () {
         orphanIds.forEach((orphanId, i) => {
           nodeBatch = nodeBatch.varAs(
             `orphan${i}`,
-            g().n([nodeId(orphanId)]).drop(),
+            g()
+              .n([nodeId(orphanId)])
+              .drop(),
           )
         })
         const nodeResult = yield* retryWriteConflict(
@@ -1399,7 +1398,13 @@ export const makeBrain = Effect.gen(function* () {
           .varAs(
             'keyword_file',
             g()
-              .textSearchNodes(LABELS.File, PROPS.body, query, SEARCH_FETCH_K, tenantId)
+              .textSearchNodes(
+                LABELS.File,
+                PROPS.body,
+                query,
+                SEARCH_FETCH_K,
+                tenantId,
+              )
               .project(hitProjection()),
           )
           .varAs(
@@ -1429,7 +1434,13 @@ export const makeBrain = Effect.gen(function* () {
           .varAs(
             'keyword_note',
             g()
-              .textSearchNodes(LABELS.Note, PROPS.body, query, SEARCH_FETCH_K, tenantId)
+              .textSearchNodes(
+                LABELS.Note,
+                PROPS.body,
+                query,
+                SEARCH_FETCH_K,
+                tenantId,
+              )
               .project(hitProjection()),
           )
           .returning([
@@ -1539,7 +1550,7 @@ export const makeBrain = Effect.gen(function* () {
           (row) => decodeRow(row),
         )
       }),
-    recordMention,
+    observeMention,
     linkItems,
     neighborhood,
     readFile: (itemId, tenantId, range) =>

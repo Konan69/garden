@@ -18,7 +18,7 @@ describe('brain audit prompt and tools', () => {
 
     expect(BRAIN_AUDIT_SYSTEM_PROMPT).toContain('ships no ontology')
     expect(BRAIN_AUDIT_SYSTEM_PROMPT).toContain('add_to_brain')
-    expect(BRAIN_AUDIT_SYSTEM_PROMPT).toContain('brain_record_mention')
+    expect(BRAIN_AUDIT_SYSTEM_PROMPT).toContain('brain_observe_mention')
     expect(BRAIN_AUDIT_SYSTEM_PROMPT).toContain('Search the brain')
     expect(BRAIN_AUDIT_SYSTEM_PROMPT).toContain(
       'Use SAME_AS only for probable duplicates',
@@ -47,7 +47,7 @@ describe('brain audit prompt and tools', () => {
           },
           body: 'Alice at Acme leads Project Atlas.',
         }),
-      recordMention: () => Effect.die('unused recordMention'),
+      observeMention: () => Effect.die('unused observeMention'),
       linkItems: () => Effect.die('unused linkItems'),
       neighborhood: () => Effect.die('unused neighborhood'),
     }

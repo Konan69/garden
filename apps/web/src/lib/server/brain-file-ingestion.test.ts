@@ -1,9 +1,14 @@
 // @vitest-environment node
-import { DateTime, Effect } from 'effect'
+import { DateTime, Effect, Layer } from 'effect'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ItemId, Kind, WorkspaceId, type BrainItem } from '@garden/brain/domain'
+import { Brain, type BrainShape } from '@garden/brain/services/brain'
 import type { AppEnv } from '@/lib/server/env'
-import { runDeferredBrainIndexAndAudit } from './brain-file-ingestion'
+import { makeBrainAuditClientLayer } from './brain-audit-runtime'
+import {
+  BrainFileIngestion,
+  makeBrainFileIngestionLayer,
+} from './brain-file-ingestion'
 
 const mockEnsureAgentRow = vi.hoisted(() => vi.fn())
 const mockGetAgentByName = vi.hoisted(() => vi.fn())
@@ -12,6 +17,11 @@ const mockLogError = vi.hoisted(() => vi.fn())
 const mockStartBrainAudit = vi.hoisted(() => vi.fn())
 
 vi.mock('agents', () => ({ getAgentByName: mockGetAgentByName }))
+
+vi.mock('@garden/agent-runtime', () => ({
+  buildContentDisposition: () => 'inline',
+  normalizeDownloadFilename: (name: string) => name,
+}))
 
 vi.mock('@/lib/server/chat-agents', () => ({
   ensureAgentRow: mockEnsureAgentRow,
@@ -41,6 +51,50 @@ const indexedItem = {
 
 const agentDo = {} as AppEnv['AgentDO']
 const hyperdrive = {} as AppEnv['HYPERDRIVE']
+const files = {} as AppEnv['FILES']
+
+const unused = () => Effect.die('unused Brain operation')
+
+/** Runs the production service layer with only Brain indexing replaced. */
+const runDeferredBrainIndexAndAudit = (
+  indexEffect: Effect.Effect<BrainItem, unknown>,
+) => {
+  const brain = Brain.of({
+    ensureIndexes: () => Effect.void,
+    index: () => indexEffect,
+    addItem: unused,
+    addText: unused,
+    updateItemMetadata: unused,
+    read: unused,
+    search: unused,
+    linkSections: unused,
+    sectionsOf: unused,
+    observeMention: unused,
+    linkItems: unused,
+    neighborhood: unused,
+    readFile: unused,
+  } satisfies BrainShape)
+  const live = makeBrainFileIngestionLayer({
+    FILES: files,
+    HYPERDRIVE: hyperdrive,
+  }).pipe(
+    Layer.provide(
+      Layer.merge(
+        Layer.succeed(Brain, brain),
+        makeBrainAuditClientLayer(agentDo),
+      ),
+    ),
+  )
+  return Effect.runPromise(
+    Effect.flatMap(BrainFileIngestion, (ingestion) =>
+      ingestion.indexAndAudit({
+        itemId: 'item-42',
+        ownerUserId: 'user-1',
+        workspaceId: 'workspace-1',
+      }),
+    ).pipe(Effect.provide(live)),
+  )
+}
 
 describe('deferred brain indexing audit trigger', () => {
   beforeEach(() => {
@@ -59,13 +113,7 @@ describe('deferred brain indexing audit trigger', () => {
   })
 
   it('calls the workspace AgentDO only after indexing succeeds', async () => {
-    await runDeferredBrainIndexAndAudit({
-      env: { AgentDO: agentDo, HYPERDRIVE: hyperdrive },
-      indexEffect: Effect.succeed(indexedItem),
-      itemId: 'item-42',
-      ownerUserId: 'user-1',
-      workspaceId: 'workspace-1',
-    })
+    await runDeferredBrainIndexAndAudit(Effect.succeed(indexedItem))
 
     expect(mockEnsureAgentRow).toHaveBeenCalledWith({
       db: { id: 'db' },
@@ -83,13 +131,7 @@ describe('deferred brain indexing audit trigger', () => {
   })
 
   it('does not call the AgentDO when indexing fails', async () => {
-    await runDeferredBrainIndexAndAudit({
-      env: { AgentDO: agentDo, HYPERDRIVE: hyperdrive },
-      indexEffect: Effect.fail(new Error('index failed')),
-      itemId: 'item-42',
-      ownerUserId: 'user-1',
-      workspaceId: 'workspace-1',
-    })
+    await runDeferredBrainIndexAndAudit(Effect.fail(new Error('index failed')))
 
     expect(mockGetAgentByName).not.toHaveBeenCalled()
     expect(mockLogError).toHaveBeenCalledWith(
@@ -102,13 +144,7 @@ describe('deferred brain indexing audit trigger', () => {
     mockStartBrainAudit.mockRejectedValueOnce(new Error('model unavailable'))
 
     await expect(
-      runDeferredBrainIndexAndAudit({
-        env: { AgentDO: agentDo, HYPERDRIVE: hyperdrive },
-        indexEffect: Effect.succeed(indexedItem),
-        itemId: 'item-42',
-        ownerUserId: 'user-1',
-        workspaceId: 'workspace-1',
-      }),
+      runDeferredBrainIndexAndAudit(Effect.succeed(indexedItem)),
     ).resolves.toBeUndefined()
     expect(mockLogError).toHaveBeenCalledWith(
       'brain file deferred audit failed',

@@ -5,6 +5,7 @@ import {
   type TurnContext,
 } from '@cloudflare/think'
 import type { LanguageModel, ToolSet, UIMessage } from 'ai'
+import { Effect, Schema } from 'effect'
 import { createAgentModel } from './model'
 import { configureThinkCompaction } from './think-compaction'
 import {
@@ -31,6 +32,15 @@ type BrainAuditConfig = ReturnType<typeof brainAuditToolContext>
 
 const THINK_TURN_MAX_RETRIES = 1
 const THINK_TURN_TELEMETRY_FUNCTION_ID = 'garden.brain-audit.turn'
+
+class BrainAuditTurnError extends Schema.TaggedErrorClass<BrainAuditTurnError>()(
+  'BrainAuditTurnError',
+  {
+    operation: Schema.String,
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 /**
  * Runs one bounded, ephemeral structuring pass over an indexed Brain item.
@@ -96,29 +106,38 @@ export class BrainAuditSubAgent extends Think<AgentRuntimeEnv> {
    * is introduced for this best-effort post-index task.
    */
   override async beforeTurn(_ctx: TurnContext): Promise<TurnConfig> {
-    const config = this.getConfig<BrainAuditConfig>()
-    if (config === null) {
-      throw new Error('BrainAuditSubAgent.beforeTurn missing audit context.')
-    }
+    return Effect.runPromise(
+      Effect.suspend(() => {
+        const config = this.getConfig<BrainAuditConfig>()
+        if (config === null) {
+          return Effect.fail(
+            new BrainAuditTurnError({
+              operation: 'configure audit turn',
+              message: 'Brain audit context is missing.',
+            }),
+          )
+        }
 
-    return {
-      model: this.getModel(),
-      experimental_telemetry: {
-        functionId: THINK_TURN_TELEMETRY_FUNCTION_ID,
-        isEnabled: true,
-        metadata: {
-          agentClass: 'BrainAuditSubAgent',
-          itemId: this.name,
-          runId: config.runId,
-        },
-        recordInputs: false,
-        recordOutputs: false,
-      },
-      activeTools: [...BRAIN_AUDIT_TOOL_NAMES],
-      maxRetries: THINK_TURN_MAX_RETRIES,
-      maxSteps: this.maxSteps,
-      sendReasoning: true,
-    }
+        return Effect.succeed({
+          model: this.getModel(),
+          experimental_telemetry: {
+            functionId: THINK_TURN_TELEMETRY_FUNCTION_ID,
+            isEnabled: true,
+            metadata: {
+              agentClass: 'BrainAuditSubAgent',
+              itemId: this.name,
+              runId: config.runId,
+            },
+            recordInputs: false,
+            recordOutputs: false,
+          },
+          activeTools: [...BRAIN_AUDIT_TOOL_NAMES],
+          maxRetries: THINK_TURN_MAX_RETRIES,
+          maxSteps: this.maxSteps,
+          sendReasoning: true,
+        } satisfies TurnConfig)
+      }),
+    )
   }
 
   /**
@@ -128,23 +147,44 @@ export class BrainAuditSubAgent extends Think<AgentRuntimeEnv> {
    * the turn reaches a terminal status.
    */
   async runAudit(input: BrainAuditRunInput): Promise<{ status: 'completed' }> {
-    this.configure<BrainAuditConfig>(brainAuditToolContext(input))
-    const message: UIMessage = {
-      id: `brain-audit:${input.itemId}:source`,
-      role: 'user',
-      parts: [
-        {
-          type: 'text',
-          text: createBrainAuditMessage(input),
-        },
-      ],
-    }
-    const result = await this.saveMessages([message])
-    if (result.status !== 'completed') {
-      throw new Error(
-        `Brain audit turn ${result.status}${result.error ? `: ${result.error}` : ''}`,
-      )
-    }
-    return { status: 'completed' }
+    return Effect.runPromise(
+      Effect.sync(() => {
+        this.configure<BrainAuditConfig>(brainAuditToolContext(input))
+        const message: UIMessage = {
+          id: `brain-audit:${input.itemId}:source`,
+          role: 'user',
+          parts: [
+            {
+              type: 'text',
+              text: createBrainAuditMessage(input),
+            },
+          ],
+        }
+        return message
+      }).pipe(
+        Effect.andThen((message) =>
+          Effect.tryPromise({
+            try: () => this.saveMessages([message]),
+            catch: (cause) =>
+              new BrainAuditTurnError({
+                operation: 'save audit messages',
+                message: 'Brain audit turn failed.',
+                cause,
+              }),
+          }),
+        ),
+        Effect.flatMap((result) => {
+          if (result.status === 'completed') {
+            return Effect.succeed({ status: 'completed' as const })
+          }
+          return Effect.fail(
+            new BrainAuditTurnError({
+              operation: 'complete audit turn',
+              message: `Brain audit turn ${result.status}${result.error ? `: ${result.error}` : ''}`,
+            }),
+          )
+        }),
+      ),
+    )
   }
 }

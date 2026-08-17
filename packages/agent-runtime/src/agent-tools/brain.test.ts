@@ -38,7 +38,7 @@ describe('createBrainTools', () => {
         })
       },
       updateItemMetadata: () => Effect.die('unused updateItemMetadata'),
-      recordMention: () => Effect.die('unused recordMention'),
+      observeMention: () => Effect.die('unused observeMention'),
       linkItems: () => Effect.die('unused linkItems'),
       neighborhood: () => Effect.die('unused neighborhood'),
     }
@@ -58,7 +58,7 @@ describe('createBrainTools', () => {
       'add_to_brain',
       'brain_link',
       'brain_neighborhood',
-      'brain_record_mention',
+      'brain_observe_mention',
       'brain_search',
     ])
     const result = await execute(tools.add_to_brain, {
@@ -107,7 +107,7 @@ describe('createBrainTools', () => {
           body: 'Acme and Alice are launching Atlas.',
         })
       },
-      recordMention: () => Effect.die('unused recordMention'),
+      observeMention: () => Effect.die('unused observeMention'),
       linkItems: () => Effect.die('unused linkItems'),
       neighborhood: () => Effect.die('unused neighborhood'),
     }

@@ -1,32 +1,21 @@
-import { Effect, Result as EffectResult, DateTime } from 'effect'
-import { Result, TaggedError } from 'better-result'
+import { Effect, Layer, Result as EffectResult } from 'effect'
 import { createFileRoute } from '@tanstack/react-router'
 import { MAX_FILE_SIZE } from '@garden/core/constants/upload'
-import {
-  buildContentDisposition,
-  normalizeDownloadFilename,
-} from '@garden/agent-runtime'
-import { Kind, WorkspaceId } from '@garden/brain/domain'
-import { Brain } from '@garden/brain/services/brain'
+import { normalizeDownloadFilename } from '@garden/agent-runtime'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import { formatOf } from '@garden/brain/services/extractor'
-import { createGardenLogger, errorFields } from '@garden/observability/logger'
 import {
   requireAppRequestContext,
   type AppRequestContext,
 } from '@/lib/server/context'
 import { badRequest, requireWorkspaceContext } from '@/lib/server/control-plane'
 import type { AppEnv } from '@/lib/server/env'
-import { runDeferredBrainIndexAndAudit } from '@/lib/server/brain-file-ingestion'
-
-class BrainFileUploadError extends TaggedError('BrainFileUploadError')<{
-  message: string
-}>() {}
-
-const brainUploadLogger = createGardenLogger({
-  service: 'garden-staging',
-  component: 'brain-upload',
-})
+import { makeBrainAuditClientLayer } from '@/lib/server/brain-audit-runtime'
+import {
+  BrainFileIngestion,
+  BrainFileIngestionError,
+  makeBrainFileIngestionLayer,
+} from '@/lib/server/brain-file-ingestion'
 
 function brainStorageKey(input: {
   workspaceId: string
@@ -43,39 +32,9 @@ function brainStorageKey(input: {
 }
 
 /**
- * Best-effort cleanup for an upload the Brain did not adopt. Previously failure
- * paths leaked the staged R2 object and duplicate handling deleted the active
- * object's key; callers now always pass the newly written key for removal.
- */
-async function discardStagedUpload(
-  files: Pick<R2Bucket, 'delete'>,
-  r2Key: string,
-  reason: 'duplicate' | 'upload_failed',
-): Promise<void> {
-  const deleteResult = await Result.tryPromise({
-    try: async () => await files.delete(r2Key),
-    catch: (cause) =>
-      new BrainFileUploadError({
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  })
-  deleteResult.tapError((error) => {
-    brainUploadLogger.error('brain staged upload cleanup failed', {
-      r2Key,
-      reason,
-      ...errorFields(error),
-    })
-  })
-}
-
-/**
- * Handles the Brain file server route. The handler writes R2 first, then either
- * adopts that key through Brain or removes it on configuration/write failure;
- * canonical duplicates retain the existing active object and discard the new
- * key. Before the deferred task ended after mechanical indexing; after it
- * succeeds, the task calls the workspace AgentDO's ephemeral audit facet with
- * the extracted body. TanStack Start server-route, Agents SDK callable RPC,
- * Think `saveMessages`, and better-result boundary guidance were consulted.
+ * Thin TanStack Start boundary for static Brain ingestion. Form parsing and
+ * HTTP validation stay here; upload adoption, cleanup, indexing, and agent
+ * audit run through the request-provided Effect service layer.
  */
 export const postBrainFileUpload = async ({
   context,
@@ -97,16 +56,25 @@ export const postBrainFileUpload = async ({
     return badRequest('Brain is not configured (missing HELIX_URL)')
   }
 
-  const formResult = await Result.tryPromise({
-    try: async () => await request.formData(),
-    catch: (cause) =>
-      new BrainFileUploadError({
-        message: cause instanceof Error ? cause.message : String(cause),
+  const formResult = await Effect.runPromise(
+    Effect.result(
+      Effect.tryPromise({
+        try: () => request.formData(),
+        catch: (cause) =>
+          new BrainFileIngestionError({
+            operation: 'parse brain upload form',
+            message:
+              cause instanceof Error ? cause.message : 'Invalid upload form.',
+            cause,
+          }),
       }),
-  })
-  if (formResult.isErr()) return badRequest(formResult.error.message)
+    ),
+  )
+  if (EffectResult.isFailure(formResult)) {
+    return badRequest(formResult.failure.message)
+  }
 
-  const file = formResult.value.get('file')
+  const file = formResult.success.get('file')
   if (!(file instanceof File)) return badRequest('Missing file')
   if (file.size > MAX_FILE_SIZE) return badRequest('File exceeds 100 MB limit')
   if (formatOf(file.name) === null)
@@ -118,78 +86,46 @@ export const postBrainFileUpload = async ({
     itemId,
     filename: file.name,
   })
-  const contentType = file.type || 'application/octet-stream'
-
-  const putResult = await Result.tryPromise({
-    try: async () =>
-      await appContext.env.FILES.put(r2Key, file.stream(), {
-        httpMetadata: {
-          contentType,
-          contentDisposition: buildContentDisposition('inline', file.name),
-        },
-      }),
-    catch: (cause) =>
-      new BrainFileUploadError({
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  })
-  if (putResult.isErr()) return badRequest(putResult.error.message)
-
   const brainLive = makeWebBrainLive({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
     files: env.FILES,
   })
-
-  const addItemEffect = Effect.gen(function* () {
-    const brain = yield* Brain
-    const added = yield* brain.addItem({
-      tenantId: WorkspaceId.make(workspaceContext.workspaceId),
-      kind: Kind.make('file'),
-      label: normalizeDownloadFilename(file.name),
-      r2Key,
-      canonical: {
-        type: 'file',
-        value: `brain:${workspaceContext.workspaceId}:${normalizeDownloadFilename(file.name)}`,
-      },
-      origin: {
-        actor: {
-          _tag: 'Human',
-          userId: workspaceContext.session.user.id,
-        },
-        at: DateTime.makeUnsafe(new Date()),
-      },
-    })
-    return added
-  }).pipe(Effect.provide(brainLive))
-
-  const addItemResult = await Effect.runPromise(Effect.result(addItemEffect))
-  if (EffectResult.isFailure(addItemResult)) {
-    await discardStagedUpload(env.FILES, r2Key, 'upload_failed')
-    return badRequest(addItemResult.failure.message)
+  const ingestionLive = makeBrainFileIngestionLayer(env).pipe(
+    Layer.provide(
+      Layer.merge(brainLive, makeBrainAuditClientLayer(env.AgentDO)),
+    ),
+  )
+  const stageResult = await Effect.runPromise(
+    Effect.result(
+      Effect.flatMap(BrainFileIngestion, (ingestion) =>
+        ingestion.stage({
+          file,
+          itemId,
+          ownerUserId: workspaceContext.session.user.id,
+          r2Key,
+          workspaceId: workspaceContext.workspaceId,
+        }),
+      ).pipe(Effect.provide(ingestionLive)),
+    ),
+  )
+  if (EffectResult.isFailure(stageResult)) {
+    return badRequest(stageResult.failure.message)
   }
-  const added = addItemResult.success
-  if (added.r2Key !== undefined && added.r2Key !== r2Key) {
-    await discardStagedUpload(env.FILES, r2Key, 'duplicate')
-  }
+  const added = stageResult.success
 
   const waitUntil = appContext.waitUntil ?? (() => {})
   waitUntil(
-    runDeferredBrainIndexAndAudit({
-      env,
-      indexEffect: Effect.gen(function* () {
-        const brain = yield* Brain
-        yield* brain.ensureIndexes()
-        return yield* brain.index(
-          added.id,
-          WorkspaceId.make(workspaceContext.workspaceId),
-        )
-      }).pipe(Effect.provide(brainLive)),
-      itemId: added.id,
-      ownerUserId: workspaceContext.session.user.id,
-      workspaceId: workspaceContext.workspaceId,
-    }),
+    Effect.runPromise(
+      Effect.flatMap(BrainFileIngestion, (ingestion) =>
+        ingestion.indexAndAudit({
+          itemId: added.id,
+          ownerUserId: workspaceContext.session.user.id,
+          workspaceId: workspaceContext.workspaceId,
+        }),
+      ).pipe(Effect.provide(ingestionLive)),
+    ),
   )
 
   return Response.json({ item: added }, { status: 201 })

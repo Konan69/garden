@@ -135,7 +135,7 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
             },
           }
           const added = yield* brain.addItem(item)
-          const firstIndex = yield* brain.index(added.id)
+          const firstIndex = yield* brain.index(added.id, workspaceId)
           expect(firstIndex.indexed).toBe(true)
           expect(
             (yield* brain.sectionsOf(added.id, workspaceId))
@@ -159,7 +159,7 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
           expect(updated.id).toBe(added.id)
           expect(updated.indexed).toBe(false)
 
-          yield* brain.index(updated.id)
+          yield* brain.index(updated.id, workspaceId)
           const sections = yield* brain.sectionsOf(updated.id, workspaceId)
           expect(sections.map((section) => section.label).sort()).toEqual([
             'Alpha',

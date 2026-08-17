@@ -87,7 +87,7 @@ it.effect('records an append-only mention observation on its source edge', () =>
       }),
       calls,
     )
-    const observation = yield* brain.recordMention({
+    const observation = yield* brain.observeMention({
       tenantId,
       itemId: ItemId.make('1'),
       span: { start: 12, end: 18 },
@@ -101,7 +101,7 @@ it.effect('records an append-only mention observation on its source edge', () =>
     expect(calls).toHaveLength(1)
     expect(calls[0]?.options?.awaitDurability).toBe(true)
     const request = calls[0]?.request.toJsonString() ?? ''
-    expect(request).toContain('"query_name":"brain.record_mention"')
+    expect(request).toContain('"query_name":"brain.observe_mention"')
     expect(request).toContain('"add_e"')
     expect(request).toContain('"label":"MENTIONS"')
     expect(request).toContain('"mention_text"')

@@ -43,7 +43,7 @@ export const QUERY = {
   vectorSearch: 'brain.vector_search',
   linkSections: 'brain.link_sections',
   sectionsOf: 'brain.sections_of',
-  recordMention: 'brain.record_mention',
+  observeMention: 'brain.observe_mention',
   linkItems: 'brain.link_items',
   updateItemMetadata: 'brain.update_item_metadata',
   neighborhood: 'brain.neighborhood',

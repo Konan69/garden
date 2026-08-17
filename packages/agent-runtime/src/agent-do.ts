@@ -108,6 +108,10 @@ import { AutomationRunSubAgent } from './automation-run-sub-agent'
 import { BrainAuditSubAgent } from './brain-audit-sub-agent'
 import type { BrainAuditRunInput } from './brain-audit'
 import {
+  BrainAuditRunner,
+  makeBrainAuditRunnerLayer,
+} from './brain-audit-runner'
+import {
   RunWorkflowCreateError,
   type RunWorkflowBinding,
   type RunWorkflowTurnStartResult,
@@ -731,49 +735,53 @@ export class AgentDO extends Agent<AgentRuntimeEnv> {
   async startBrainAudit(
     input: Omit<BrainAuditRunInput, 'agentId'>,
   ): Promise<{ ok: true; status: 'completed' }> {
-    await this.requireWorkspaceAccess(input.workspaceId)
-    const agentId = await this.resolveRuntimeAgentId()
-    agentRuntimeLogger.info('agent_do.brain_audit.start_requested', {
-      agentId,
-      itemId: input.itemId,
-      workspaceId: input.workspaceId,
+    const layer = makeBrainAuditRunnerLayer({
+      authorize: (workspaceId) => this.requireWorkspaceAccess(workspaceId),
+      resolveAgentId: () => this.resolveRuntimeAgentId(),
+      acquire: (itemId) => this.subAgent(BrainAuditSubAgent, itemId),
+      release: (itemId) => this.deleteSubAgent(BrainAuditSubAgent, itemId),
+      onStarted: ({ agentId, itemId, workspaceId }) => {
+        agentRuntimeLogger.info('agent_do.brain_audit.start_requested', {
+          agentId,
+          itemId,
+          workspaceId,
+        })
+      },
+      onCleanupFailure: ({ agentId, itemId, workspaceId, cause }) => {
+        agentRuntimeLogger.warn('agent_do.brain_audit.cleanup_failed', {
+          agentId,
+          itemId,
+          message: messageFromUnknown(cause),
+          workspaceId,
+        })
+      },
     })
-
-    const audit = await this.subAgent(BrainAuditSubAgent, input.itemId)
-    const runResult = await Result.tryPromise({
-      try: async () => await audit.runAudit({ ...input, agentId }),
-      catch: (cause) => cause,
-    })
-    const cleanupResult = await Result.tryPromise({
-      try: async () =>
-        await this.deleteSubAgent(BrainAuditSubAgent, input.itemId),
-      catch: (cause) => cause,
-    })
-    cleanupResult.tapError((cause) => {
-      agentRuntimeLogger.warn('agent_do.brain_audit.cleanup_failed', {
-        agentId,
-        itemId: input.itemId,
-        message: messageFromUnknown(cause),
-        workspaceId: input.workspaceId,
-      })
-    })
-
-    if (runResult.isErr()) {
-      agentRuntimeLogger.error('agent_do.brain_audit.failed', {
-        agentId,
-        itemId: input.itemId,
-        message: messageFromUnknown(runResult.error),
-        workspaceId: input.workspaceId,
-      })
-      throw runResult.error
-    }
-
-    agentRuntimeLogger.info('agent_do.brain_audit.completed', {
-      agentId,
-      itemId: input.itemId,
-      workspaceId: input.workspaceId,
-    })
-    return { ok: true, status: runResult.value.status }
+    return Effect.runPromise(
+      Effect.flatMap(BrainAuditRunner, (runner) => runner.run(input)).pipe(
+        Effect.tap(({ agentId }) =>
+          Effect.sync(() => {
+            agentRuntimeLogger.info('agent_do.brain_audit.completed', {
+              agentId,
+              itemId: input.itemId,
+              workspaceId: input.workspaceId,
+            })
+          }),
+        ),
+        Effect.tapError((failure) =>
+          Effect.sync(() => {
+            agentRuntimeLogger.error('agent_do.brain_audit.failed', {
+              agentId: failure.agentId,
+              itemId: input.itemId,
+              message: messageFromUnknown(failure.cause),
+              operation: failure.operation,
+              workspaceId: input.workspaceId,
+            })
+          }),
+        ),
+        Effect.map(({ status }) => ({ ok: true as const, status })),
+        Effect.provide(layer),
+      ),
+    )
   }
 
   async cancelIssueRun(input: {
