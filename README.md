@@ -286,7 +286,7 @@ Browser ─── TanStack Start Worker ─── Neon Postgres (shared product 
                          └── Cloudflare Sandbox for container tasks
 ```
 
-Garden is Cloudflare-first. TanStack Start runs in a Worker, Durable Objects
+Garden is currently Cloudflare-first; while we continue to progressively decentralize the infrastructure. TanStack Start runs in a Worker, Durable Objects
 host agent and Model Context Protocol (MCP) sessions, Workflows manage
 long-running task and automation runs, and R2 stores files. Neon Postgres is the
 source of truth for shared product data.
