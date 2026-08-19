@@ -17,6 +17,9 @@ plans and meeting notes do not.
 
 ## Beta-critical gaps
 
+“Priority” shows how urgently Garden needs the outcome for release. It is not a
+security-severity rating from GitHub or a vulnerability report.
+
 | Priority | Public issue                                             | Outcome                                                                                  | More detail                                                    |
 | -------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | Critical | Security remediation in progress                         | Enforce server-side authority for permission changes                                     | [Auth and access](./auth-and-access.md)                        |
