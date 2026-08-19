@@ -76,7 +76,7 @@ export const launchGates: WorkItem[] = [
       'Automations are the core of Garden. A run should finish, pause cleanly, or tell us why it stopped. Cloudflare Workflows owns retries, waits, resumes, cancellation, and recovery. We will keep unfinished automation options out of demos until the full path works.',
     priority: 'high',
     evidence: 'packages/agent-runtime/src/run-workflow.ts',
-    links: [flo(31), gh(31)],
+    links: [flo(31)],
   },
   {
     ref: 'SHIPPED',
@@ -97,21 +97,12 @@ export const launchGates: WorkItem[] = [
     links: [flo(30), gh(27)],
   },
   {
-    ref: 'GH #53',
+    ref: 'SECURITY',
     title: 'Close permission and authorization gaps',
     detail:
-      'Permission grants and admin actions must check explicit capabilities. Access needs clear scope and revocation. A disabled button is not authorization.',
+      'Permission grants and admin actions must enforce explicit server-side authority. Approval requests must reach only authorized reviewers. Vulnerability details follow the repository security policy until remediation is deployed.',
     priority: 'high',
-    evidence: 'apps/web/src/routes/api/connections',
-    links: [gh(53)],
-  },
-  {
-    ref: 'BLOCKED',
-    title: 'Put Garden on garden.flowresearch.tech',
-    detail:
-      'The production domain is blocked on access to the Flow Research Cloudflare DNS zone. Once that is available, wire the domain, TLS, auth origins, OAuth callbacks, and deployment checks.',
-    priority: 'high',
-    note: 'blocked: Cloudflare DNS',
+    note: 'report details through SECURITY.md',
   },
   {
     ref: 'FLO-32',
@@ -130,14 +121,6 @@ export const launchGates: WorkItem[] = [
     priority: 'high',
     note: 'design + engineering',
   },
-  {
-    ref: 'ACTIVE',
-    title: 'Start rewriting Garden in Effect-TS',
-    detail:
-      'Move Garden to Effect in small, shippable slices. Start with core services and runtime paths as they are touched, keep behavior covered by tests, and leave the current product usable throughout the migration.',
-    priority: 'high',
-    note: 'incremental migration',
-  },
 ]
 
 /** Work pulled forward after the internal loop is dependable. */
@@ -149,7 +132,7 @@ export const betaQuality: WorkItem[] = [
       'Go beyond the Connected badge for Slack, Gmail, Google Drive, and GitHub. Garden needs grounded targets, sensible grants, account routing, reauthorization, and useful errors when a connection breaks.',
     priority: 'high',
     note: 'no Jira dependency',
-    links: [gh(37), gh(48)],
+    links: [gh(48)],
   },
   {
     ref: 'NEXT',
@@ -175,12 +158,12 @@ export const betaQuality: WorkItem[] = [
     links: [flo(37), gh(32)],
   },
   {
-    ref: 'SOON',
-    title: 'Build the knowledge graph and shared memory',
+    ref: 'GH #31',
+    title: 'Harden automation contracts',
     detail:
-      'Let Garden carry useful workspace context across chats, tasks, agents, and automations. Keep sources visible so synthesized memory can be checked and corrected.',
+      'Add typed authentication, replay protection, idempotency, attribution, audit, and observable concurrency behavior before treating external triggers as dependable.',
     priority: 'medium',
-    links: [gh(23), gh(29)],
+    links: [gh(31)],
   },
   {
     ref: 'PILOT',
@@ -193,6 +176,20 @@ export const betaQuality: WorkItem[] = [
 
 /** Direction beyond the current beta push. */
 export const longHorizon: WorkItem[] = [
+  {
+    ref: 'RESEARCH',
+    title: 'Earn provider portability from one real workload',
+    detail:
+      'Keep the managed path working, then extract and test only the minimum provider-neutral interface required by one funded or partner-backed workflow. Prove one private deployment before adding cluster machinery.',
+    priority: 'low',
+  },
+  {
+    ref: 'RESEARCH',
+    title: 'Add safe local and edge operation',
+    detail:
+      'Prove one useful surface through a network outage with durable local state, explicit synchronization, visible conflicts, placement policy, and no unauthorized irreversible action.',
+    priority: 'low',
+  },
   {
     ref: 'LATER',
     title: 'Mini apps for repeated workflows',
@@ -209,9 +206,16 @@ export const longHorizon: WorkItem[] = [
   },
   {
     ref: 'LATER',
-    title: 'Enterprise controls when a deal needs them',
+    title: 'Open independently operated resource layers',
     detail:
-      'Add SSO, deeper role controls, retention settings, and on-premises deployment when a real deal needs them. We do not need to build the procurement checklist ahead of demand.',
+      'Let qualified operators provide bounded compute, storage, inference, skills, agents, connectors, verification, or hosting through open interfaces and conformance tests. Begin only after real demand and safe verification exist.',
+    priority: 'low',
+  },
+  {
+    ref: 'RESEARCH',
+    title: 'Fund useful work before considering new currencies',
+    detail:
+      'Begin with bounded pre-funded pools and lawful payment rails. Mutual credit or crypto remains optional later research and must solve a proven exchange problem without becoming a requirement for Garden to work.',
     priority: 'low',
   },
 ]
@@ -251,6 +255,10 @@ export const deferredUntilEvidence: NotNowItem[] = [
     text: 'Broad marketplace before internal and pilot workflows prove reusable value',
   },
   {
+    text: 'Organization-wide memory before a concrete workflow and correction model justify it',
+    links: [gh(23), gh(29)],
+  },
+  {
     text: 'Generic visual runtime before mini-app requirements are grounded',
     links: [gh(15)],
   },
@@ -270,17 +278,23 @@ export const antiPriorities: NotNowItem[] = [
   {
     text: 'No marketplace breadth before the core automation loop is reliable',
   },
+  {
+    text: 'No token, blockchain, or permissionless production execution before useful demand and safety gates exist',
+  },
 ]
 
 export const roadmapMeta = {
   horizon: 'Now → Next → Later',
-  updated: '17 Jul 2026',
-  goal: 'First, make Garden work for us. That means automations we can trust, productivity tools wired through Executor, and the controls an enterprise team will ask for. Once it survives daily use, we can bring in a few focused pilots.',
+  updated: '19 Aug 2026',
+  goal: 'First, make Garden dependable for internal use and a small beta. Then earn portability, local operation, and independently operated resource layers from bounded workflows with real demand. Future economic mechanisms follow useful service; they do not substitute for it.',
   boardsUrl: 'https://github.com/Flow-Research/garden/issues',
   sources: [
-    { label: 'docs/roadmap.md', detail: 'beta priorities' },
+    {
+      label: 'docs/roadmap.md',
+      detail: 'beta priorities and longer direction',
+    },
     { label: 'workspace board', detail: 'FLO issues' },
     { label: 'GitHub issues', detail: 'execution details' },
-    { label: 'team decisions', detail: 'through 17 Jul' },
+    { label: 'team decisions', detail: 'through 19 Aug' },
   ],
 }

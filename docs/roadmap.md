@@ -46,10 +46,10 @@ scope can stay narrow; the core cannot feel fragile.
    - Complete cross-workspace isolation coverage across routes, agent calls,
      inbox, approvals, documents, and attachments
      ([#27](https://github.com/Flow-Research/garden/issues/27)).
-   - Require the correct authority before a member changes agent permissions
-     ([#53](https://github.com/Flow-Research/garden/issues/53)).
-   - Fix connector permission defaults and approval-recipient selection
-     ([#37](https://github.com/Flow-Research/garden/issues/37)).
+   - Require explicit server-side authority before a member changes agent
+     permissions, and ensure approval requests reach only authorized reviewers.
+     Track vulnerability details through [the security policy](../SECURITY.md)
+     until remediation is deployed.
    - Keep risky-tool approval paths closed when authorization, audit, or write
      operations fail.
 

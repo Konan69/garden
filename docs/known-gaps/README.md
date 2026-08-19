@@ -20,9 +20,9 @@ current-versus-target distinction.
 
 | Priority | Public issue                                             | Outcome                                                                                 | Canonical detail                                               |
 | -------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Critical | [#53](https://github.com/Flow-Research/garden/issues/53) | Require `permissionManage` authority before changing agent grants                       | [Auth and access](./auth-and-access.md)                        |
+| Critical | Security remediation in progress                         | Enforce server-side authority for permission changes                                    | [Auth and access](./auth-and-access.md)                        |
 | High     | [#27](https://github.com/Flow-Research/garden/issues/27) | Cross-workspace isolation regression coverage                                           | [Auth and access](./auth-and-access.md)                        |
-| High     | [#37](https://github.com/Flow-Research/garden/issues/37) | Safe connector defaults and correct approval recipient                                  | [Connectors](./connectors.md)                                  |
+| High     | Security remediation in progress                         | Safe connector defaults and authorized approval routing                                 | [Connectors](./connectors.md)                                  |
 | High     | Tracking needed                                          | Staging proof for the complete issue and automation run lifecycle                       | [Issue flow](./issue-flow.md), [Automations](./automations.md) |
 | High     | [#33](https://github.com/Flow-Research/garden/issues/33) | Health contract, end-to-end beta smoke tests, staging, release, and observability gates | [Infrastructure](./infrastructure.md)                          |
 | High     | [#28](https://github.com/Flow-Research/garden/issues/28) | Connector capability grants, policy enforcement, and catalog drift                      | [Connectors](./connectors.md)                                  |
@@ -34,16 +34,18 @@ current-versus-target distinction.
 “Tracking needed” means the gap is documented but does not have a verified
 matching public GitHub issue. The older `FLO-*` labels in these documents are
 internal work-item names and should not be mistaken for GitHub issue numbers.
+Public documents describe security outcomes without reproducing exploit
+details. Report vulnerabilities through [the security policy](../../SECURITY.md).
 
 ## Current capability boundaries
 
-| Area                 | What exists now                                                                                                           | What must not be claimed yet                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Local development    | `pnpm dev:offline` runs the app, database, storage, and an optional Ollama model locally for development.                 | Production offline-first operation, safe multi-device synchronization, disconnected external effects, or a supported self-host package. |
-| Managed runtime      | Cloudflare Workers, Durable Objects, Workflows, R2, D1, Sandbox, and Neon support the current development/reference path. | Provider neutrality, automatic failover between providers, or production portability.                                                   |
-| Agents and work      | Chat, issues, automations, skills, documents, connectors, tool grants, and sandboxed execution paths exist.               | General autonomous management, an organization-wide memory, or unrestricted agent authority.                                            |
-| Contribution records | Garden can expose work and evidence in its workspace.                                                                     | A complete Workstream review-to-acceptance lifecycle, settlement, reputation, or automatic rewards.                                     |
-| Open source          | The code is available under AGPL-3.0-only and can be studied, changed, and run under that license.                        | A decentralized network, permissionless production execution, or a live provider marketplace.                                           |
+| Area                 | What exists now                                                                                                                               | What must not be claimed yet                                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Local development    | `pnpm offline:up` starts local dependencies; optional Ollama uses `pnpm offline:up:ollama`; `pnpm dev:offline` then starts the local web app. | Production offline-first operation, safe multi-device synchronization, disconnected external effects, or a supported self-host package. |
+| Managed runtime      | Cloudflare Workers, Durable Objects, Workflows, R2, D1, Sandbox, and Neon support the current development/reference path.                     | Provider neutrality, automatic failover between providers, or production portability.                                                   |
+| Agents and work      | Chat, issues, automations, skills, documents, connectors, tool grants, and sandboxed execution paths exist.                                   | General autonomous management, an organization-wide memory, or unrestricted agent authority.                                            |
+| Contribution records | Garden can expose work and evidence in its workspace.                                                                                         | A complete Workstream review-to-acceptance lifecycle, settlement, reputation, or automatic rewards.                                     |
+| Open source          | The code is available under AGPL-3.0-only and can be studied, changed, and run under that license.                                            | A decentralized network, permissionless production execution, or a live provider marketplace.                                           |
 
 ## Directional gaps — research, not beta commitments
 
