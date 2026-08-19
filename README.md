@@ -351,12 +351,12 @@ Database commands:
 
 ## Project status
 
-The current focus is a dependable small-user beta: workspace isolation, run
-recovery, connector reliability, smoke coverage, and trustworthy approval and
-audit paths. The [roadmap](docs/roadmap.md) tracks beta work and the longer
-local-first, edge-native, cloud-optional direction. The
-[known-gaps index](docs/known-gaps/README.md) separates current blockers from
-future research so target architecture is not mistaken for shipped capability.
+Garden is preparing for a small beta. We are focused on keeping workspaces
+separate, making failed runs recoverable, improving connections, and ensuring
+sensitive actions require the right approval. The [roadmap](docs/roadmap.md)
+also explains the longer local-first, edge-native, cloud-optional direction.
+The [known-gaps index](docs/known-gaps/README.md) clearly separates what works
+today from what still needs to be built or researched.
 
 On-premises and fully self-hosted operation are not current capabilities. See
 [`docs/core/DEFERRED.md`](docs/core/DEFERRED.md) for deliberate non-goals and

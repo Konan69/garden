@@ -15,23 +15,31 @@ export interface ReadinessGate {
 }
 
 export const readinessGates: ReadinessGate[] = [
-  { id: 'auth', label: 'Origin + CSRF validation enabled', status: 'done' },
-  { id: 'isolation', label: 'Workspace-isolation coverage', status: 'open' },
-  { id: 'smoke', label: 'Smoke tests in CI + staging', status: 'open' },
-  { id: 'runs', label: 'Recoverable run terminal states', status: 'open' },
+  {
+    id: 'auth',
+    label: 'Cross-site request protection enabled',
+    status: 'done',
+  },
+  {
+    id: 'isolation',
+    label: 'Workspace separation fully tested',
+    status: 'open',
+  },
+  { id: 'smoke', label: 'Core journeys tested before release', status: 'open' },
+  { id: 'runs', label: 'Failed runs recover cleanly', status: 'open' },
   {
     id: 'connectors',
-    label: 'Direct Executor boundary proven',
+    label: 'Connector engine works inside Garden',
     status: 'done',
   },
   {
     id: 'approvals',
-    label: 'Trustworthy approval + audit paths',
+    label: 'Sensitive actions have trusted approvals',
     status: 'open',
   },
   {
     id: 'walkthrough',
-    label: 'Internal dogfood walkthrough passes',
+    label: 'Internal test journey passes',
     status: 'open',
   },
 ]
@@ -63,61 +71,61 @@ export interface WorkItem {
 export const launchGates: WorkItem[] = [
   {
     ref: 'FLO-28',
-    title: 'Dogfood Garden on real internal work',
+    title: 'Use Garden for real internal work',
     detail:
-      'Start with work we already do every week: GitHub pull-request reviews, meeting transcript processing, internal points, and team operations. Using Garden for real work will tell us what to fix next.',
+      'Start with work we already do every week. Real use will show us what is reliable, what is confusing, and what to fix next.',
     priority: 'high',
     links: [flo(28)],
   },
   {
     ref: 'FLO-31',
-    title: 'Durable automation and issue runs',
+    title: 'Make tasks and automations recover cleanly',
     detail:
-      'Automations are the core of Garden. A run should finish, pause cleanly, or tell us why it stopped. Cloudflare Workflows owns retries, waits, resumes, cancellation, and recovery. We will keep unfinished automation options out of demos until the full path works.',
+      'A run should finish, pause safely, or explain why it stopped. We will keep unfinished options out of demos until start, resume, cancel, failure, and recovery all work.',
     priority: 'high',
     evidence: 'packages/agent-runtime/src/run-workflow.ts',
     links: [flo(31)],
   },
   {
     ref: 'SHIPPED',
-    title: 'Run Executor directly in Garden',
+    title: 'Run the connector engine inside Garden',
     detail:
-      'Executor now owns connector catalog, installation, authentication, execution, and MCP sessions inside the Garden Worker. Garden keeps the Connections UI, workspace policy, approvals, and audit history.',
+      'Garden now hosts its connector engine. Garden still owns what people see: connections, workspace rules, approvals, and action history.',
     priority: 'shipped',
-    note: 'productivity suite first',
+    note: 'shipped foundation',
     links: [gh(28)],
   },
   {
     ref: 'FLO-30',
-    title: 'Workspace-isolation regression coverage',
+    title: 'Prove workspaces cannot reach each other',
     detail:
-      'Add one CI suite that tries to cross workspace boundaries through routes, agent RPC, inbox, approvals, documents, attachments, automations, and Executor. It must fail every time.',
+      'Add one automated test suite that tries every important path between two workspaces. Every unauthorized attempt must fail.',
     priority: 'high',
     evidence: 'apps/web/src/lib/server/control-plane.ts',
     links: [flo(30), gh(27)],
   },
   {
     ref: 'SECURITY',
-    title: 'Close permission and authorization gaps',
+    title: 'Close permission gaps',
     detail:
-      'Permission grants and admin actions must enforce explicit server-side authority. Approval requests must reach only authorized reviewers. Vulnerability details follow the repository security policy until remediation is deployed.',
+      'The server must check every permission change. Approval requests should go only to people who are allowed to decide. Security details remain private until fixes are deployed.',
     priority: 'high',
     note: 'report details through SECURITY.md',
   },
   {
     ref: 'FLO-32',
-    title: 'Health endpoint and staging smoke suite',
+    title: 'Test the core journey before release',
     detail:
-      'Add a stable health endpoint and a staging smoke test for login, workspace setup, chat, tasks, automations, approvals, connections, and documents. The internal walkthrough should pass without someone repairing state by hand.',
+      'Check login, workspace setup, chat, tasks, automations, approvals, connections, and documents. The full journey should pass without someone repairing data by hand.',
     priority: 'high',
     evidence: 'apps/web/src/server.ts',
     links: [flo(32), gh(33)],
   },
   {
     ref: 'ALIGN',
-    title: 'Implement the new design in shippable slices',
+    title: 'Improve the design in small releases',
     detail:
-      'Move the new design into Garden one working slice at a time. Tie each slice to a real workflow, review it with engineering, and keep the product usable as the new design lands. Record decisions in one shared place so the team knows what changed and why.',
+      'Release one useful part at a time. Tie each change to a real workflow, keep Garden usable, and record why important decisions were made.',
     priority: 'high',
     note: 'design + engineering',
   },
@@ -127,9 +135,9 @@ export const launchGates: WorkItem[] = [
 export const betaQuality: WorkItem[] = [
   {
     ref: 'NEXT',
-    title: 'Make productivity tools dependable',
+    title: 'Make connected tools dependable',
     detail:
-      'Go beyond the Connected badge for Slack, Gmail, Google Drive, and GitHub. Garden needs grounded targets, sensible grants, account routing, reauthorization, and useful errors when a connection breaks.',
+      'Slack, Gmail, Google Drive, and GitHub should do more than show a Connected badge. Permissions, account choice, reconnection, and error messages all need to work clearly.',
     priority: 'high',
     note: 'no Jira dependency',
     links: [gh(48)],
@@ -151,17 +159,17 @@ export const betaQuality: WorkItem[] = [
   },
   {
     ref: 'FLO-37',
-    title: 'Prompt snapshots, traces, and evaluations',
+    title: 'Make agent failures easier to understand',
     detail:
-      'Save the prompt and runtime configuration behind each run. Use the same failure names across chat, tasks, and automations. Add traces and regression checks where they help us reproduce a real failure.',
+      'Save the setup behind each run, use clear failure names, keep secrets out of logs, and add tests for problems we need to reproduce.',
     priority: 'medium',
     links: [flo(37), gh(32)],
   },
   {
     ref: 'GH #31',
-    title: 'Harden automation contracts',
+    title: 'Protect automation triggers',
     detail:
-      'Add typed authentication, replay protection, idempotency, attribution, audit, and observable concurrency behavior before treating external triggers as dependable.',
+      'Reject fake or repeated requests, record who triggered each run, and make simultaneous runs behave predictably.',
     priority: 'medium',
     links: [gh(31)],
   },
@@ -178,16 +186,16 @@ export const betaQuality: WorkItem[] = [
 export const longHorizon: WorkItem[] = [
   {
     ref: 'RESEARCH',
-    title: 'Earn provider portability from one real workload',
+    title: 'Prove Garden can run beyond one cloud',
     detail:
-      'Keep the managed path working, then extract and test only the minimum provider-neutral interface required by one funded or partner-backed workflow. Prove one private deployment before adding cluster machinery.',
+      'Keep the managed version working, then use one real workflow to test the smallest common interface another provider needs. Start with one private machine, not a cluster.',
     priority: 'low',
   },
   {
     ref: 'RESEARCH',
-    title: 'Add safe local and edge operation',
+    title: 'Keep useful work available during an outage',
     detail:
-      'Prove one useful surface through a network outage with durable local state, explicit synchronization, visible conflicts, placement policy, and no unauthorized irreversible action.',
+      'Test one useful workflow without a network connection. Save work locally, show conflicts clearly, and wait for confirmed permission before taking actions that cannot be undone.',
     priority: 'low',
   },
   {
@@ -206,16 +214,23 @@ export const longHorizon: WorkItem[] = [
   },
   {
     ref: 'LATER',
-    title: 'Open independently operated resource layers',
+    title: 'Let independent providers run useful services',
     detail:
-      'Let qualified operators provide bounded compute, storage, inference, skills, agents, connectors, verification, or hosting through open interfaces and conformance tests. Begin only after real demand and safe verification exist.',
+      'Qualified operators may later provide computing, storage, AI models, skills, agents, connectors, checking, or hosting. Start only when there is real demand and a safe way to verify the service.',
     priority: 'low',
   },
   {
     ref: 'RESEARCH',
-    title: 'Fund useful work before considering new currencies',
+    title: 'Fund useful work before creating new currencies',
     detail:
-      'Begin with bounded pre-funded pools and lawful payment rails. Mutual credit or crypto remains optional later research and must solve a proven exchange problem without becoming a requirement for Garden to work.',
+      'Begin with a fixed pool funded in advance and normal lawful payments. Mutual credit or crypto remains optional research and must never be required for Garden to work.',
+    priority: 'low',
+  },
+  {
+    ref: 'WORKSTREAM',
+    title: 'Route work by specialty and verified experience',
+    detail:
+      'Workstream may later divide outcomes into clear tasks, match people and agents using specialty, availability, completed work, and reputation within that field, then bring the results together. AI can recommend; clear rules and accountable people still approve important decisions.',
     priority: 'low',
   },
 ]
@@ -225,7 +240,7 @@ export interface ArchitectureBoundary {
   responsibility: string
 }
 
-/** Only the C4 boundaries needed to understand current roadmap ownership. */
+/** Product boundaries needed to understand current roadmap ownership. */
 export const architectureBoundaries: ArchitectureBoundary[] = [
   {
     owner: 'Garden',
@@ -235,12 +250,12 @@ export const architectureBoundaries: ArchitectureBoundary[] = [
   {
     owner: 'Executor',
     responsibility:
-      'Connector catalog, installation, authentication, execution, and MCP session hosting inside the Garden Worker.',
+      'The connector catalog, setup, authentication, tool calls, and live connector sessions inside Garden.',
   },
   {
     owner: 'Cloudflare Workflows',
     responsibility:
-      'Durable runs: retries, waits, resumes, cancellation, and final state.',
+      'Long-running work: retries, waits, resumes, cancellation, and final status.',
   },
 ]
 
@@ -271,7 +286,7 @@ export const deferredUntilEvidence: NotNowItem[] = [
 ]
 
 export const antiPriorities: NotNowItem[] = [
-  { text: 'No full platform rewrite for the current MVP' },
+  { text: 'No full platform rewrite for the current beta' },
   { text: 'No customer presented as adopted before commitment' },
   { text: 'No second connector catalog or execution host inside Garden' },
   { text: 'No second retry or recovery layer around Cloudflare Workflows' },
@@ -286,7 +301,7 @@ export const antiPriorities: NotNowItem[] = [
 export const roadmapMeta = {
   horizon: 'Now → Next → Later',
   updated: '19 Aug 2026',
-  goal: 'First, make Garden dependable for internal use and a small beta. Then earn portability, local operation, and independently operated resource layers from bounded workflows with real demand. Future economic mechanisms follow useful service; they do not substitute for it.',
+  goal: 'First, make Garden dependable for internal use and a small beta. Then use real workflows to prove private deployment, local operation, and services run by independent providers. Funding follows useful work; it does not replace it.',
   boardsUrl: 'https://github.com/Flow-Research/garden/issues',
   sources: [
     {

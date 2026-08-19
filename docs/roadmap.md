@@ -1,6 +1,6 @@
 # Garden Roadmap
 
-**Current horizon:** dependable small-user beta and internal dogfooding
+**Current horizon:** dependable small-user beta and internal testing
 
 **Long-term direction:** local-first, edge-native, cloud-optional, and progressively decentralized
 
@@ -8,35 +8,32 @@
 
 ## What we are building toward
 
-Garden is a workspace where people and AI agents can work together through
-chat, tasks, automations, documents, skills, connected tools, sandboxes, and
-human approvals.
+Garden is a shared workspace where people and AI agents can chat, manage work,
+use tools, create documents, and ask for approval before taking sensitive
+actions.
 
-The current implementation is Cloudflare-first and is preparing for a small
-beta. The longer-term goal is a full stack that independent people and
-organizations can run, extend, and provide services for without depending on
-one cloud, one operator, or one economic mechanism.
+Garden currently runs mainly on Cloudflare and is preparing for a small beta.
+Over time, we want people and organizations to be able to run and extend Garden
+without depending on one cloud company, one operator, or one payment model.
 
 In this roadmap:
 
-- **local-first** means useful work and durable local state remain available on
-  a person's or organization's own device, with explicit synchronization when
-  a connection returns;
-- **edge-native** means work can run near its data, users, or physical systems
-  when policy, safety, latency, and cost make that the right placement;
-- **cloud-optional** means managed cloud remains a convenient choice, not a
-  permanent requirement; and
-- **decentralized** means control and value can be distributed across
-  independently operated layers. Open-source code or distributed machines
-  alone do not make the system decentralized.
+- **local-first:** useful work remains available on your own device and syncs
+  clearly when a connection returns;
+- **edge-native:** work can run close to the people, data, or machines that use
+  it;
+- **cloud-optional:** managed cloud remains available, but it is not the only
+  way to run Garden; and
+- **decentralized:** independent operators can run different parts of the
+  system and earn from the value they provide. Open-source code alone is not
+  enough.
 
 These are target properties, not claims about the current beta.
 
 ## Now — dependable beta
 
-Garden should survive real use by a small group without data leaks, stuck
-runs, duplicate actions, silent failures, or confusing recovery paths. Product
-scope can stay narrow; the core cannot feel fragile.
+Garden should work reliably for a small group without leaking data, getting
+stuck, repeating actions, or failing without explanation.
 
 ### P0 — must land before beta
 
@@ -53,26 +50,22 @@ scope can stay narrow; the core cannot feel fragile.
    - Keep risky-tool approval paths closed when authorization, audit, or write
      operations fail.
 
-2. **Run resilience**
-   - Prove issue and automation runs start, wait, resume, cancel, fail, and
-     recover cleanly through `RunWorkflow` in staging.
-   - Ensure terminal states never leave stuck `running` rows, duplicate starts,
-     orphaned active runs, or hidden failure reasons.
-   - Keep Workflows as the current managed recovery boundary; do not add a
-     second queue or transcript-repair system without evidence that it is
-     required.
+2. **Runs finish and recover**
+   - Test every important run path: start, pause, resume, cancel, fail, and
+     recover.
+   - Prevent duplicate starts and stuck work, and always show why a run failed.
+   - Keep one recovery system until real evidence shows that another is needed.
 
-3. **Operational confidence**
-   - Add a stable health contract, end-to-end beta smoke tests, staging checks,
-     and release evidence
+3. **Confidence before release**
+   - Add a health check and simple end-to-end tests for the beta
      ([#33](https://github.com/Flow-Research/garden/issues/33)).
    - Cover login and workspace creation, chat, issue runs, automation runs,
      approvals, and document artifacts.
-   - Prove backup, restore, release, and rollback procedures for the managed
-     beta before treating it as production-ready.
+   - Test backup, restore, release, and recovery before calling the beta ready
+     for production use.
 
 4. **Connector reliability**
-   - Harden capability grants, policy enforcement, and catalog drift handling
+   - Keep tool permissions and the connector catalog accurate
      ([#28](https://github.com/Flow-Research/garden/issues/28)).
    - Make connector failures visible, attributable, and recoverable.
 
@@ -80,67 +73,65 @@ scope can stay narrow; the core cannot feel fragile.
 
 - Shorten onboarding from signup to a useful agent action and make failed-run
   recovery understandable.
-- Add reverse issue-to-chat breadcrumbs and multi-issue links
+- Make it easy to move between related chats and tasks
   ([#34](https://github.com/Flow-Research/garden/issues/34)).
-- Add versioned prompt and configuration provenance, secret-safe traces, a
-  failure taxonomy, and regression evaluations
+- Save the setup behind each run, add logs that do not expose secrets, and make
+  important failures reproducible
   ([#32](https://github.com/Flow-Research/garden/issues/32)).
-- Harden automation authentication, replay protection, idempotency, audit, and
-  concurrency contracts
+- Protect automation triggers from fake or repeated requests, and make
+  simultaneous runs predictable
   ([#31](https://github.com/Flow-Research/garden/issues/31)).
 - Continue user-interface polish in small slices driven by internal and partner
   workflows rather than broad speculative feature work.
 
 ## Next — earn portability from real use
 
-Portability should be extracted from a real, bounded workload rather than from
-an attempt to replace every Cloudflare service at once.
+We will learn portability from one real workflow instead of trying to replace
+every Cloudflare service at once.
 
-1. Inventory the Cloudflare and Neon behavior Garden currently depends on:
-   durable agent identity, workflows, files, SQL, sandboxes, model access,
-   secrets, and telemetry.
-2. Select one funded or partner-backed workflow with an owner, data agreement,
-   support boundary, cost cap, and acceptance tests.
-3. Define and test only the smallest provider-neutral interface needed by that
-   workflow. Keep the current Cloudflare adapter working.
-4. Prove a private reference deployment on one machine before adding cluster
-   machinery. Compare security, recovery, performance, and fully loaded cost
-   with the managed path.
-5. Publish the interface and conformance tests so another operator can
-   implement the same behavior without changing Garden's product rules.
+1. List what Garden currently needs from Cloudflare and Neon.
+2. Choose one funded or partner-backed workflow with a clear owner, data rules,
+   budget, support plan, and definition of success.
+3. Build only the smallest common interface that workflow needs. Keep the
+   current managed version working.
+4. Test a private deployment on one machine before considering a cluster.
+   Compare safety, reliability, speed, and total cost.
+5. Publish the interface and tests so another operator can provide the same
+   service without changing how Garden behaves.
 
-A valid result is either a working private adapter or evidence that the managed
-path should remain in place for that workload. Portability is not achieved by
-renaming provider-specific services.
+A valid result may be a working private deployment—or clear evidence that the
+managed option is still better for that workflow.
 
 ## Then — local and edge operation
 
-- Add an encrypted durable local outbox and an explicit accepted-event sync
-  protocol for one useful product surface.
+- Save pending local changes securely and sync them clearly when the network
+  returns.
 - Make pending, accepted, rejected, and conflicting changes visible to people.
 - Preserve local usefulness through network loss, restart, duplicate delivery,
   stale policy, and constrained devices.
-- Route workloads by data sensitivity, authority, latency, safety, runtime
-  capability, reliability, and total cost—not by price alone.
+- Place work according to privacy, permission, speed, safety, reliability, and
+  total cost—not price alone.
 - Keep irreversible external actions waiting for current authoritative
-  approval. Safety-critical physical control remains with independent local
-  deterministic interlocks, not a general AI model or an untrusted node.
+  approval. Emergency limits for physical machines must remain local,
+  independent, and predictable—not controlled by a general AI model or an
+  untrusted computer.
 
 ## Later — federated and open resource layers
 
-Garden may eventually use independently operated compute, storage, inference,
-skills, connectors, agents, verification, and hosting services. Each layer
-should have an open interface, evidence of service, an accountable operator,
-and a way to exit or replace the provider.
+Garden may eventually use independent providers for computing, storage, AI
+models, skills, connectors, agents, checking, and hosting. Each service should
+have an open interface, a named operator, proof that it worked, and a clear way
+to replace it.
 
 Open participation does not mean unrestricted execution. New community nodes
 begin with public, low-risk, reproducible work whose results can be
 independently checked and safely rejected. Private data, customer secrets,
-canonical records, payment authority, and safety-critical control stay on
+official records, payment authority, and safety-critical control stay on
 explicitly approved infrastructure.
 
-Resource markets begin only after a named buyer or budget, a bounded workload,
-an acceptance method, fully loaded unit economics, and a safe fallback exist.
+Resource markets begin only when there is a real buyer or approved budget, a
+clear piece of work, a way to judge the result, a full cost estimate, and a
+safe backup option.
 Garden supplies the workspace and execution evidence; it does not become a
 bank, payment rail, or universal economic ledger.
 
@@ -149,29 +140,34 @@ bank, payment rail, or universal economic ledger.
 Economic incentives follow useful demand; they do not substitute for it.
 
 1. **Now:** contributors may receive recognition for verified work. Current
-   points do not automatically promise cash, equity, governance power, credit,
-   or tokens.
-2. **First funded lane:** a sponsor, partner, or customer pre-funds a bounded
-   pool with published work rules, budgets, acceptance evidence, and human
-   authorization. Lawful payment rails settle any cash award.
+   points are not a promise of cash, ownership, voting power, credit, or tokens.
+2. **First funded lane:** a sponsor, partner, or customer funds a fixed pool in
+   advance, with clear rules, a fixed budget, proof of completion, and human
+   approval. Normal lawful payment services handle any cash award.
 3. **Demand-backed market:** repeated paid use can support independently
    operated skills, agents, connectors, inference, compute, storage, and other
    services. Providers earn for accepted service, not merely for advertising
    idle capacity.
-4. **Federation:** common receipts and conformance tests allow independent
-   organizations to operate compatible parts of the network and retain value
-   at the layer they provide.
+4. **Independent operators:** shared records and tests let different
+   organizations provide compatible services and earn at the layer they run.
 5. **Optional later mechanisms:** mutual credit or crypto may be researched
    only when real exchange has demonstrated a problem that contracts and
-   regulated local or cross-border payment rails cannot solve adequately. Any
-   such mechanism needs separate governance, legal and accounting review,
-   security analysis, participant protections, and shutdown rules. Garden's
-   usefulness must never depend on issuing a token.
+   normal local or international payments cannot solve well. Any such system
+   needs separate governance, legal and accounting review, security work,
+   participant protections, and shutdown rules. Garden must remain useful
+   without a token.
 
-Workstream is the intended governed record for contribution requests,
-evidence, review, and acceptance where that lifecycle is required. Its current
-v0.1 implementation is incomplete, and it remains separate from Garden's
-workspace and execution responsibilities.
+Where formal coordination is needed, Workstream is intended to help turn an
+outcome into clear pieces of work, route them to people or agents with the
+right specialty, and bring the results back together. Matching can consider
+availability, relevant experience, proof from completed work, and reputation
+within that field. Workstream would also record what was requested, submitted,
+checked, and accepted.
+
+AI may suggest how work is divided and routed. Clear rules and accountable
+people still approve important assignments, acceptance, payment, and any
+reputation change that could affect future opportunities. Workstream is still
+being built and remains separate from Garden's workspace and execution tools.
 
 ## Deliberate anti-priorities
 

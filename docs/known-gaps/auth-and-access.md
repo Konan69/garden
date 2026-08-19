@@ -2,10 +2,10 @@
 
 ## Active gaps
 
-| Issue                | Gap                                                                                                                                                                                                                       | Evidence                                                                                      | Priority |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------- |
-| Security remediation | State-changing permission-management paths need consistent server-side authority checks. Closure requires integration coverage proving unauthorized roles are rejected and authorized roles retain the intended workflow. | Security review and permission-route integration tests; exploit details follow `SECURITY.md`. | Critical |
-| FLO-30               | Workspace isolation is application-enforced rather than DB-RLS-backed and lacks one regression suite across routes, agent RPC, inbox, approvals, documents, and attachments.                                              | `resolveWorkspaceId()` and workspace-scoped service queries; `docs/core/technical.md` sec. 11 | High     |
+| Issue                | Gap                                                                                                                                                                    | Evidence                                                                                      | Priority |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------- |
+| Security remediation | Every permission change must be checked on the server. This closes when tests prove unauthorized roles are rejected and authorized roles still work.                   | Security review and permission-route integration tests; exploit details follow `SECURITY.md`. | Critical |
+| FLO-30               | Garden checks workspace access in application code, but it still needs one complete test suite proving one workspace cannot reach another through any product surface. | `resolveWorkspaceId()` and workspace-scoped service queries; `docs/core/technical.md` sec. 11 | High     |
 
 ## Done
 
