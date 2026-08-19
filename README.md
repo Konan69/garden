@@ -351,11 +351,12 @@ Database commands:
 
 ## Project status
 
-The current focus is a dependable small-user beta: workspace isolation, run
-recovery, connector reliability, smoke coverage, and trustworthy approval and
-audit paths. The [roadmap](docs/roadmap.md) tracks beta work, and the
-[known-gaps index](docs/known-gaps/README.md) records unfinished or deferred
-areas.
+Garden is preparing for a small beta. We are focused on keeping workspaces
+separate, making failed runs recoverable, improving connections, and ensuring
+sensitive actions require the right approval. The [roadmap](docs/roadmap.md)
+also explains the longer local-first, edge-native, cloud-optional direction.
+The [known-gaps index](docs/known-gaps/README.md) clearly separates what works
+today from what still needs to be built or researched.
 
 On-premises and fully self-hosted operation are not current capabilities. See
 [`docs/core/DEFERRED.md`](docs/core/DEFERRED.md) for deliberate non-goals and
@@ -375,8 +376,8 @@ privately through [SECURITY.md](SECURITY.md).
 
 | Document                                                               | Covers                                      |
 | ---------------------------------------------------------------------- | ------------------------------------------- |
-| [`docs/roadmap.md`](docs/roadmap.md)                                   | Beta priorities and readiness checklist     |
-| [`docs/known-gaps/README.md`](docs/known-gaps/README.md)               | Current gaps by product and runtime area     |
+| [`docs/roadmap.md`](docs/roadmap.md)                                   | Beta priorities and longer product direction |
+| [`docs/known-gaps/README.md`](docs/known-gaps/README.md)               | Current gaps and future research boundaries  |
 | [`docs/core/PRD.md`](docs/core/PRD.md)                                 | Product requirements                        |
 | [`docs/core/technical.md`](docs/core/technical.md)                     | Architecture and current implementation     |
 | [`docs/design.md`](docs/design.md)                                     | Design system and interaction principles    |

@@ -1,63 +1,197 @@
-# Garden Roadmap — Beta / Soft Launch
+# Garden Roadmap
 
-**Horizon:** small-user beta and dogfood testing
-**Focus:** stability, resilience, and confidence over new surface area
+**Current horizon:** dependable small-user beta and internal testing
 
-## Goal
+**Long-term direction:** local-first, edge-native, cloud-optional, and progressively decentralized
 
-Garden should survive real use by a small beta group without data leaks, stuck runs, silent failures, or confusing recovery paths. Product can stay narrow; it cannot feel fragile.
+**Last reviewed:** 2026-08-19
 
-## P0 — must land before beta
+## What we are building toward
 
-1. **Ship-safety gates**
-   - ✅ Better Auth origin and CSRF checks restored and covered by focused tests.
-   - FLO-30 — add workspace-isolation regression coverage across routes, agent RPC, inbox, approvals, documents, and attachments.
-   - Keep risky-tool approval paths fail-closed when audit or write operations fail.
+Garden is a shared workspace where people and AI agents can chat, manage work,
+use tools, create documents, and ask for approval before taking sensitive
+actions.
 
-2. **Run resilience**
-   - FLO-31 — prove issue and automation runs start, wait, resume, cancel, fail, and recover cleanly through `RunWorkflow` in staging.
-   - Ensure terminal states never leave stuck `running` rows, duplicate starts, orphaned active runs, or hidden failure reasons.
-   - Keep Workflows as recovery boundary; no second queue or transcript-repair layer.
+Garden currently runs mainly on Cloudflare and is preparing for a small beta.
+Over time, we want people and organizations to be able to run and extend Garden
+without depending on one cloud company, one operator, or one payment model.
 
-3. **Connector reliability**
-   - Track connector health, cleanup, and catalog sync in connector-specific issues and docs.
+In this roadmap:
 
-4. **Operational confidence**
-   - FLO-32 — add `/api/health` and beta smoke coverage for login/workspace, chat, issue run, automation run, and document artifacts.
-   - ✅ PostHog captures client and Worker failures.
-   - ✅ `alchemy.run.ts` defines Cloudflare and Neon staging resources.
+- **local-first:** useful work remains available on your own device and syncs
+  clearly when a connection returns;
+- **edge-native:** work can run close to the people, data, or machines that use
+  it;
+- **cloud-optional:** managed cloud remains available, but it is not the only
+  way to run Garden; and
+- **decentralized:** independent operators can run different parts of the
+  system and earn from the value they provide. Open-source code alone is not
+  enough.
 
-## P1 — beta quality
+These are target properties, not claims about the current beta.
 
-- FLO-34 — polish onboarding and failed-run recovery paths.
-- ✅ FLO-35 — existing-thread-document picker shipped.
-- FLO-36 — add reverse issue-chat breadcrumbs and multi-issue links.
-- FLO-37 — add prompt snapshots, secret-safe tracing, failure taxonomy, and regression evals.
-- FLO-38 — harden automation trigger contracts and either implement or remove queue concurrency support.
+## Now — dependable beta
 
-## Deferred until evidence
+Garden should work reliably for a small group without leaking data, getting
+stuck, repeating actions, or failing without explanation.
 
-- Workspace-wide realtime bus; current mounted chat streams and bounded polling/refetch are acceptable until beta shows pain.
-- Parent-backed shared memory, files, MCP state, cross-chat search, or a Workspace/container bridge.
-- Workspace-level artifact tabs and Review Grid.
-- Visual runtime, charts, and rendered widgets.
-- Broader connector marketplace.
-- Pricing and billing polish.
+### P0 — must land before beta
 
-## Anti-priorities
+1. **Access and approval safety**
+   - ✅ Better Auth origin and cross-site request-forgery checks restored and
+     covered by focused tests.
+   - Complete cross-workspace isolation coverage across routes, agent calls,
+     inbox, approvals, documents, and attachments
+     ([#27](https://github.com/Flow-Research/garden/issues/27)).
+   - Require explicit server-side authority before a member changes agent
+     permissions, and ensure approval requests reach only authorized reviewers.
+     Track vulnerability details through [the security policy](../SECURITY.md)
+     until remediation is deployed.
+   - Keep risky-tool approval paths closed when authorization, audit, or write
+     operations fail.
 
-- Do not add issue-backed automation compatibility.
-- Do not add queue dispatch between `AgentDO` and `RunWorkflow`.
-- Do not collapse chats into one mutable Think session.
-- Do not build app-wide realtime before measured need.
-- Do not treat Sandbox `/workspace` and Think/Shell `Workspace` as shared storage without an explicit bridge.
+2. **Runs finish and recover**
+   - Test every important run path: start, pause, resume, cancel, fail, and
+     recover.
+   - Prevent duplicate starts and stuck work, and always show why a run failed.
+   - Keep one recovery system until real evidence shows that another is needed.
+
+3. **Confidence before release**
+   - Add a health check and simple end-to-end tests for the beta
+     ([#33](https://github.com/Flow-Research/garden/issues/33)).
+   - Cover login and workspace creation, chat, issue runs, automation runs,
+     approvals, and document artifacts.
+   - Test backup, restore, release, and recovery before calling the beta ready
+     for production use.
+
+4. **Connector reliability**
+   - Keep tool permissions and the connector catalog accurate
+     ([#28](https://github.com/Flow-Research/garden/issues/28)).
+   - Make connector failures visible, attributable, and recoverable.
+
+### P1 — beta quality
+
+- Shorten onboarding from signup to a useful agent action and make failed-run
+  recovery understandable.
+- Make it easy to move between related chats and tasks
+  ([#34](https://github.com/Flow-Research/garden/issues/34)).
+- Save the setup behind each run, add logs that do not expose secrets, and make
+  important failures reproducible
+  ([#32](https://github.com/Flow-Research/garden/issues/32)).
+- Protect automation triggers from fake or repeated requests, and make
+  simultaneous runs predictable
+  ([#31](https://github.com/Flow-Research/garden/issues/31)).
+- Continue user-interface polish in small slices driven by internal and partner
+  workflows rather than broad speculative feature work.
+
+## Next — earn portability from real use
+
+We will learn portability from one real workflow instead of trying to replace
+every Cloudflare service at once.
+
+1. List what Garden currently needs from Cloudflare and Neon.
+2. Choose one funded or partner-backed workflow with a clear owner, data rules,
+   budget, support plan, and definition of success.
+3. Build only the smallest common interface that workflow needs. Keep the
+   current managed version working.
+4. Test a private deployment on one machine before considering a cluster.
+   Compare safety, reliability, speed, and total cost.
+5. Publish the interface and tests so another operator can provide the same
+   service without changing how Garden behaves.
+
+A valid result may be a working private deployment—or clear evidence that the
+managed option is still better for that workflow.
+
+## Then — local and edge operation
+
+- Save pending local changes securely and sync them clearly when the network
+  returns.
+- Make pending, accepted, rejected, and conflicting changes visible to people.
+- Preserve local usefulness through network loss, restart, duplicate delivery,
+  stale policy, and constrained devices.
+- Place work according to privacy, permission, speed, safety, reliability, and
+  total cost—not price alone.
+- Keep irreversible external actions waiting for current authoritative
+  approval. Emergency limits for physical machines must remain local,
+  independent, and predictable—not controlled by a general AI model or an
+  untrusted computer.
+
+## Later — federated and open resource layers
+
+Garden may eventually use independent providers for computing, storage, AI
+models, skills, connectors, agents, checking, and hosting. Each service should
+have an open interface, a named operator, proof that it worked, and a clear way
+to replace it.
+
+Open participation does not mean unrestricted execution. New community nodes
+begin with public, low-risk, reproducible work whose results can be
+independently checked and safely rejected. Private data, customer secrets,
+official records, payment authority, and safety-critical control stay on
+explicitly approved infrastructure.
+
+Resource markets begin only when there is a real buyer or approved budget, a
+clear piece of work, a way to judge the result, a full cost estimate, and a
+safe backup option.
+Garden supplies the workspace and execution evidence; it does not become a
+bank, payment rail, or universal economic ledger.
+
+## Contribution and network economics
+
+Economic incentives follow useful demand; they do not substitute for it.
+
+1. **Now:** contributors may receive recognition for verified work. Current
+   points are not a promise of cash, ownership, voting power, credit, or tokens.
+2. **First funded lane:** a sponsor, partner, or customer funds a fixed pool in
+   advance, with clear rules, a fixed budget, proof of completion, and human
+   approval. Normal lawful payment services handle any cash award.
+3. **Demand-backed market:** repeated paid use can support independently
+   operated skills, agents, connectors, inference, compute, storage, and other
+   services. Providers earn for accepted service, not merely for advertising
+   idle capacity.
+4. **Independent operators:** shared records and tests let different
+   organizations provide compatible services and earn at the layer they run.
+5. **Optional later mechanisms:** mutual credit or crypto may be researched
+   only when real exchange has demonstrated a problem that contracts and
+   normal local or international payments cannot solve well. Any such system
+   needs separate governance, legal and accounting review, security work,
+   participant protections, and shutdown rules. Garden must remain useful
+   without a token.
+
+Where formal coordination is needed, Workstream is intended to help turn an
+outcome into clear pieces of work, route them to people or agents with the
+right specialty, and bring the results back together. Matching can consider
+availability, relevant experience, proof from completed work, and reputation
+within that field. Workstream would also record what was requested, submitted,
+checked, and accepted.
+
+AI may suggest how work is divided and routed. Clear rules and accountable
+people still approve important assignments, acceptance, payment, and any
+reputation change that could affect future opportunities. Workstream is still
+being built and remains separate from Garden's workspace and execution tools.
+
+## Deliberate anti-priorities
+
+- Do not delay beta hardening to build a token, blockchain, peer-to-peer
+  network, universal scheduler, or generic marketplace.
+- Do not describe offline development mode as production local-first or
+  self-hosted operation.
+- Do not replace the working managed path before a second workload proves the
+  minimum portable interface.
+- Do not put private, regulated, irreversible, or safety-critical work on
+  untrusted community infrastructure.
+- Do not reward node count, agent calls, compute advertised, or tasks created;
+  measure accepted outcomes, reliability, cost, safety, and repeat demand.
 
 ## Beta readiness checklist
 
-- [x] Better Auth origin and CSRF validation enabled.
-- [ ] Workspace-isolation coverage complete.
-- [ ] Core smoke tests pass in CI and staging.
-- [ ] Runs have visible, recoverable terminal states.
+- [x] Better Auth origin and cross-site request validation enabled.
+- [x] A newcomer can run Garden locally without a Cloudflare account through
+      the offline development mode.
+- [ ] Cross-workspace isolation and permission-management coverage complete.
+- [ ] Core smoke tests pass in continuous integration and staging.
+- [ ] Runs have visible, recoverable terminal states with duplicate prevention.
 - [ ] Connector failures are explainable and recoverable.
-- [ ] Approval/audit paths are trustworthy for risky tools.
-- [ ] Tester can complete: connect tool → chat → create issue → agent run → approve action → review output.
+- [ ] Approval and audit paths are trustworthy for risky tools.
+- [ ] Backup, restore, release, and rollback procedures are tested.
+- [ ] A tester can complete: connect tool → chat → create issue → agent run →
+      approve action → review output.
