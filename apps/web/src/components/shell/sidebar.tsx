@@ -8,7 +8,7 @@ import {
 import { Result } from 'better-result'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconMessage2Plus } from '@tabler/icons-react'
-import { Bot, Plus, Search, X, Zap } from 'lucide-react'
+import { Bot, Plus, Search, X, Zap, FolderOpen } from 'lucide-react'
 import { Icon as IconifyIcon } from '@iconify/react'
 import { BrandIcon } from '@garden/ui/components/common/brand-icon'
 import type { Agent, Skill } from '@garden/core/types'
@@ -65,6 +65,7 @@ type RailContext =
   | 'home'
   | 'chats'
   | 'tasks'
+  | 'brain'
   | 'automations'
   | 'inbox'
   | 'agents'
@@ -101,6 +102,15 @@ const railItems: RailItem[] = [
     label: 'Tasks',
     icon: HomeTasksIcon,
     defaultPanel: { kind: 'issues', title: 'Tasks' },
+  },
+  {
+    id: 'brain',
+    label: 'Files & Folders',
+    icon: FolderOpen,
+    defaultPanel: {
+      kind: 'brain-files',
+      title: 'Files & Folders',
+    },
   },
   {
     id: 'automations',
@@ -141,6 +151,8 @@ function contextFromPanel(kind: WorkspacePanelKind | null): RailContext {
     case 'issues':
     case 'issue-detail':
       return 'tasks'
+    case 'brain-files':
+      return 'brain'
     case 'automations':
     case 'automation-detail':
       return 'automations'

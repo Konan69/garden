@@ -12,6 +12,7 @@ import { ConnectionsPage } from '@/features/connections'
 import { AutomationDetailPage, AutomationsPage } from '@/features/automations'
 import { useRequiredWorkspaceDock } from './context'
 import { getTabConfig, toPanelConfig } from './model'
+import { BrainFilesPage } from '@/features/brain'
 import { panelIcons } from './panel-icons'
 import type { BlankPanelChoice, WorkspacePanelConfig } from './types'
 
@@ -30,6 +31,11 @@ const blankPanelChoices: BlankPanelChoice[] = [
     kind: 'issues',
     title: 'Tasks',
     description: 'Task list and issue detail flow',
+  },
+  {
+    kind: 'brain-files',
+    title: 'Files & Folders',
+    description: 'Upload and manage workspace knowledge',
   },
   {
     kind: 'automations',
@@ -336,6 +342,12 @@ export function WorkspacePanelFactory({ node }: { node: TabNode }) {
       )
     case 'issue-detail':
       return <IssueDetailPanel node={node} panel={panel} />
+    case 'brain-files':
+      return (
+        <PanelChrome node={node}>
+          <BrainFilesPage />
+        </PanelChrome>
+      )
     case 'automations':
       return <AutomationsPanel node={node} />
     case 'automation-detail':

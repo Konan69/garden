@@ -11,11 +11,13 @@ export type WorkspacePanelKind =
   | 'capabilities'
   | 'agents'
   | 'agent-detail'
+  | 'brain-files'
 
 export type WorkspaceRailContext =
   | 'home'
   | 'chats'
   | 'tasks'
+  | 'brain'
   | 'automations'
   | 'inbox'
   | 'agents'
@@ -83,6 +85,7 @@ export const workspacePanelKinds = [
   'automation-detail',
   'chat',
   'skill-editor',
+  'brain-files',
   'capabilities',
   'agents',
   'agent-detail',
@@ -92,6 +95,7 @@ export const singletonKinds = new Set<WorkspacePanelKind>([
   'dashboard',
   'inbox',
   'issues',
+  'brain-files',
   'automations',
   'skill-editor',
   'capabilities',
@@ -111,6 +115,8 @@ export function getRailContextForPanel(
     case 'automations':
     case 'automation-detail':
       return 'automations'
+    case 'brain-files':
+      return 'brain'
     case 'inbox':
       return 'inbox'
     case 'agents':

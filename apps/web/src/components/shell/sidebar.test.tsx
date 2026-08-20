@@ -348,4 +348,19 @@ describe('WorkspaceSidebar', () => {
       screen.queryByRole('button', { name: /^agent$/i }),
     ).not.toBeInTheDocument()
   })
+
+  it('opens Files & Folders without the context explorer', async () => {
+    render(<WorkspaceSidebar />)
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /files & folders/i }),
+    )
+
+    expect(mockOpenPanel).toHaveBeenCalledWith({
+      kind: 'brain-files',
+      title: 'Files & Folders',
+    })
+    expect(mockSetOpen).toHaveBeenCalledWith(false)
+    expect(screen.queryByText('Chat session explorer')).not.toBeInTheDocument()
+  })
 })

@@ -285,6 +285,21 @@ describe('WorkspaceDockProvider', () => {
     expect(readPersistedLayout()).not.toContain('chat:chat-1')
   })
 
+  it('renders Files & Folders through the panel factory', async () => {
+    renderDock({ view: true })
+
+    act(() => {
+      capturedDock?.openPanel({
+        kind: 'brain-files',
+        title: 'Files & Folders',
+      })
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Files & Folders' }),
+    ).toBeInTheDocument()
+  })
+
   it('renders FlexLayout panels through the factory', async () => {
     renderDock({ view: true })
 
