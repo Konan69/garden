@@ -18,9 +18,9 @@ import { EyeIcon, EyeOffIcon, Loader2Icon } from 'lucide-react'
  * Why this shape: redesigned Aug 2026 to land on Garden's locked visual
  * language (parchment + vellum + foliage — see packages/ui/styles/tokens.css)
  * instead of the old generic two-column card. The previous right-hand
- * marketing rail and footer disclaimer were filler text and are intentionally
- * gone; the greeting carries no subtitle unless an invitation flow needs its
- * functional line (login-page.test.tsx pins those exact strings).
+ * marketing rail was filler and is intentionally gone; the greeting carries no
+ * subtitle unless an invitation flow needs its functional line. Sign-up now
+ * includes the real legal acknowledgement required for account creation.
  *
  * The deep-arched top ("greenhouse window") frames the brand mark and
  * greeting; the form lives in the rectangular zone below. The greeting is set
@@ -181,12 +181,10 @@ export function LoginForm({
             <FieldError>{error}</FieldError>
 
             <Field>
-              <Button
-                type="submit"
-                className="h-10 w-full"
-                disabled={loading}
-              >
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              <Button type="submit" className="h-10 w-full" disabled={loading}>
+                {loading ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : null}
                 {loading
                   ? isSignup
                     ? 'Creating account...'
@@ -207,6 +205,25 @@ export function LoginForm({
                 {isSignup ? 'Sign in' : 'Create an account'}
               </button>
             </FieldDescription>
+            {isSignup ? (
+              <FieldDescription className="text-center text-[11px] leading-4">
+                By creating an account, you agree to our{' '}
+                <a
+                  href="/terms"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Terms
+                </a>{' '}
+                and acknowledge our{' '}
+                <a
+                  href="/privacy"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Privacy Policy
+                </a>
+                .
+              </FieldDescription>
+            ) : null}
           </FieldGroup>
         </form>
       </div>
