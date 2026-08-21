@@ -12,6 +12,7 @@ import {
   g,
   readBatch,
   writeBatch,
+  Order,
 } from '@helix-db/helix-db'
 import type { PropertyValueInput, Traversal } from '@helix-db/helix-db'
 import {
@@ -95,6 +96,10 @@ export type BrainShape = {
     readonly SearchHit[],
     HelixError | WriteConflict | EmbedError
   >
+  readonly listFiles: (input: {
+    tenantId: WorkspaceId
+    limit?: number
+  }) => Effect.Effect<readonly BrainItem[], HelixError | WriteConflict>
   readonly linkSections: (
     fileId: ItemId,
     sectionIds: readonly ItemId[],
@@ -441,6 +446,15 @@ const EMBED_BATCH_SIZE = 100
 const MAX_INDEX_SECTIONS = 1000
 const NEIGHBORHOOD_MAX_ITEMS = 50
 const NEIGHBORHOOD_MAX_EDGES = 100
+const MAX_FILE_LIST_LIMIT = 100
+
+const normalizeFileListLimit = (limit: number | undefined): number => {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return MAX_FILE_LIST_LIMIT
+  }
+
+  return Math.min(MAX_FILE_LIST_LIMIT, Math.max(1, Math.trunc(limit)))
+}
 
 const truncateForEmbed = (text: string): string =>
   text.length <= MAX_EMBED_CHARS ? text : text.slice(0, MAX_EMBED_CHARS)
@@ -1366,6 +1380,32 @@ export const makeBrain = Effect.gen(function* () {
         if (row === undefined) return null
         if (row.workspace_id !== tenantId) return null
         return yield* decodeRow(row)
+      }),
+
+    listFiles: ({ tenantId, limit }) =>
+      Effect.gen(function* () {
+        const request = readBatch()
+          .varAs(
+            'files',
+            g()
+              .nWithLabelWhere(
+                LABELS.File,
+                SourcePredicate.eq(PROPS.tenantId, tenantId),
+              )
+              .orderBy(PROPS.label, Order.Asc)
+              .limit(normalizeFileListLimit(limit))
+              .valueMap(itemProps()),
+          )
+          .returning(['files'])
+          .toQueryRequest({ queryName: QUERY.listFiles })
+
+        const result = yield* helix.run(request)
+        const decodedFiles = yield* Effect.forEach(
+          rows(result, 'files'),
+          decodeRow,
+        )
+
+        return decodedFiles.filter((file) => file.tenantId === tenantId)
       }),
     search: ({ tenantId, query, k }) =>
       Effect.gen(function* () {

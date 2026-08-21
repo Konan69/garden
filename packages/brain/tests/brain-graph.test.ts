@@ -282,3 +282,44 @@ it.effect(
       expect(request).not.toContain('"repeat"')
     }),
 )
+
+it.effect('lists a bounded file set without leaking another workspace', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const otherTenantId = WorkspaceId.make('ws-other')
+
+    const brain = yield* testBrain(
+      () => ({
+        files: [
+          itemRow(1, 'Alpha.txt', 'file'),
+          {
+            ...itemRow(2, 'Private.txt', 'file'),
+            workspace_id: otherTenantId,
+          },
+          itemRow(3, 'Release notes.md', 'file'),
+        ],
+      }),
+      calls,
+    )
+
+    const files = yield* brain.listFiles({
+      tenantId,
+      limit: 25,
+    })
+
+    expect(files.map((file) => file.label)).toEqual([
+      'Alpha.txt',
+      'Release notes.md',
+    ])
+
+    expect(calls).toHaveLength(1)
+
+    const request = calls[0]?.request.toJsonString() ?? ''
+
+    expect(request).toContain('"query_name":"brain.list_files"')
+    expect(request).toContain('"property":"$label"')
+    expect(request).toContain('"string":"file"')
+    expect(request).toContain('"workspace_id"')
+    expect(request).toContain('"limit"')
+  }),
+)

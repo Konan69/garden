@@ -36,6 +36,7 @@ export const EDGES = {
 export const QUERY = {
   index: 'brain.index',
   read: 'brain.read',
+  listFiles: 'brain.list_files',
   ensureIndexes: 'brain.ensure_indexes',
   indexStatus: 'brain.index_status',
   search: 'brain.search',
