@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrainFilesPage } from './files-page'
@@ -54,6 +60,30 @@ describe('BrainFilesPage', () => {
     expect(await screen.findByText('saved-notes.txt')).toBeInTheDocument()
     expect(screen.getByText('Ready')).toBeInTheDocument()
     expect(mockListBrainFiles).toHaveBeenCalledOnce()
+  })
+
+  it('uses the designed upload and file tile dimensions', async () => {
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'stored-file-1',
+        name: 'saved-notes.txt',
+        status: 'ready',
+      },
+    ])
+
+    renderFilesPage()
+
+    const filesRegion = await screen.findByRole('region', { name: 'Files' })
+    const uploadTile = within(filesRegion).getByRole('button', {
+      name: /add your documents or drag and drop them here/i,
+    })
+    const fileTile = within(filesRegion).getByRole('listitem')
+
+    expect(uploadTile).toHaveClass('min-h-[7.125rem]', 'sm:w-[24.375rem]')
+    expect(fileTile).toHaveClass('min-h-[7.125rem]', 'sm:w-[11.625rem]')
+    expect(
+      within(filesRegion).queryByRole('heading', { name: 'Files' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows a list error and lets the user try again', async () => {

@@ -10,45 +10,45 @@ import {
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
-function BrainFileRow({ uploadedFile }: { uploadedFile: BrainFileSummary }) {
+function BrainFileCard({ uploadedFile }: { uploadedFile: BrainFileSummary }) {
   const statusQuery = useQuery(
     brainFileStatusOptions(uploadedFile.id, uploadedFile.status),
   )
   const file = statusQuery.data ?? uploadedFile
 
   return (
-    <li className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
-      <FileText className="size-5 shrink-0 text-muted-foreground" />
+    <li className="flex min-h-[7.125rem] w-full flex-col justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 sm:w-[11.625rem]">
+      <div className="flex w-full min-w-0 items-start gap-2.5">
+        <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
 
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-foreground">
+        <p className="min-w-0 truncate text-sm font-medium text-foreground">
           {file.name}
         </p>
-
-        {statusQuery.isError ? (
-          <div className="mt-1 flex items-center gap-2 text-xs">
-            <p role="alert" className="text-destructive">
-              Could not check file status.
-            </p>
-
-            <button
-              type="button"
-              className="font-medium text-foreground underline-offset-4 hover:underline"
-              onClick={() => void statusQuery.refetch()}
-            >
-              Try again
-            </button>
-          </div>
-        ) : (
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-            {file.status === 'processing' ? (
-              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-            ) : null}
-
-            {file.status === 'ready' ? 'Ready' : 'Processing'}
-          </p>
-        )}
       </div>
+
+      {statusQuery.isError ? (
+        <div className="mt-3 text-xs">
+          <p role="alert" className="text-destructive">
+            Could not check file status.
+          </p>
+
+          <button
+            type="button"
+            className="mt-1 font-medium text-foreground underline-offset-4 hover:underline"
+            onClick={() => void statusQuery.refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      ) : (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {file.status === 'processing' ? (
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+          ) : null}
+
+          {file.status === 'ready' ? 'Ready' : 'Processing'}
+        </p>
+      )}
     </li>
   )
 }
@@ -97,85 +97,90 @@ export function BrainFilesPage() {
 
   return (
     <main className="h-full overflow-y-auto bg-background">
-      <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-10">
-        <header>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Files & Folders
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Keep all your documents organized, secure, and accessible in one
-            place.
-          </p>
-        </header>
-
-        <button
-          type="button"
-          disabled={uploadMutation.isPending}
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={handleDrop}
-          className="mt-10 flex min-h-36 w-full max-w-xl flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-6 text-center transition-colors hover:bg-muted/50 disabled:cursor-wait disabled:opacity-70"
-        >
-          {uploadMutation.isPending ? (
-            <Loader2 className="size-5 animate-spin text-foreground" />
-          ) : (
-            <FilePlus2 className="size-5 text-foreground" />
-          )}
-
-          <span className="mt-4 text-sm font-medium text-foreground">
-            {uploadMutation.isPending
-              ? 'Uploading your document...'
-              : 'Add your documents or drag and drop them here'}
-          </span>
-
-          <span className="mt-2 text-xs text-muted-foreground">
-            TXT, MD, PDF, DOCX, and XLSX, up to 100 MB
-          </span>
-        </button>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_FILE_TYPES}
-          className="hidden"
-          onChange={handleFileChange}
-          aria-label="Choose a document to upload"
-        />
-
-        {uploadError ? (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {uploadError}
-          </p>
-        ) : null}
-
-        {filesQuery.isError ? (
-          <div className="mt-6 flex items-center gap-3 text-sm">
-            <p role="alert" className="text-destructive">
-              Could not load files.
+      <div className="w-full px-6 py-10 sm:px-10 lg:px-[4.875rem]">
+        <div className="max-w-[61rem]">
+          <header>
+            <h1 className="text-2xl font-semibold text-foreground">
+              Files & Folders
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Keep all your documents organized, secure, and accessible in one
+              place.
             </p>
+          </header>
 
-            <button
-              type="button"
-              disabled={filesQuery.isFetching}
-              className="font-medium text-foreground underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-70"
-              onClick={() => void filesQuery.refetch()}
-            >
-              {filesQuery.isFetching ? 'Trying...' : 'Try again'}
-            </button>
-          </div>
-        ) : null}
+          <section aria-label="Files" className="mt-8">
+            <div className="flex flex-wrap items-start gap-3">
+              <button
+                type="button"
+                disabled={uploadMutation.isPending}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleDrop}
+                className="flex min-h-[7.125rem] w-full flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-6 text-center transition-colors hover:bg-muted/50 disabled:cursor-wait disabled:opacity-70 sm:w-[24.375rem]"
+              >
+                {uploadMutation.isPending ? (
+                  <Loader2 className="size-5 animate-spin text-foreground" />
+                ) : (
+                  <FilePlus2 className="size-5 text-foreground" />
+                )}
 
-        {files.length > 0 ? (
-          <section className="mt-8 w-full max-w-xl">
-            <h2 className="text-sm font-medium text-foreground">Files</h2>
+                <span className="mt-3 text-sm font-medium text-foreground">
+                  {uploadMutation.isPending
+                    ? 'Uploading your document...'
+                    : 'Add your documents or drag and drop them here'}
+                </span>
 
-            <ul className="mt-3 space-y-2" aria-live="polite">
-              {files.map((file) => (
-                <BrainFileRow key={file.id} uploadedFile={file} />
-              ))}
-            </ul>
+                <span className="mt-2 text-xs text-muted-foreground">
+                  TXT, MD, PDF, DOCX, and XLSX, up to 100 MB
+                </span>
+              </button>
+
+              {files.length > 0 ? (
+                <ul
+                  className="flex w-full min-w-0 flex-wrap gap-3 sm:w-auto sm:min-w-[11.625rem] sm:flex-1"
+                  aria-live="polite"
+                >
+                  {files.map((file) => (
+                    <BrainFileCard key={file.id} uploadedFile={file} />
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_FILE_TYPES}
+              className="hidden"
+              onChange={handleFileChange}
+              aria-label="Choose a document to upload"
+            />
+
+            {uploadError ? (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {uploadError}
+              </p>
+            ) : null}
+
+            {filesQuery.isError ? (
+              <div className="mt-4 flex items-center gap-3 text-sm">
+                <p role="alert" className="text-destructive">
+                  Could not load files.
+                </p>
+
+                <button
+                  type="button"
+                  disabled={filesQuery.isFetching}
+                  className="font-medium text-foreground underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-70"
+                  onClick={() => void filesQuery.refetch()}
+                >
+                  {filesQuery.isFetching ? 'Trying...' : 'Try again'}
+                </button>
+              </div>
+            ) : null}
           </section>
-        ) : null}
+        </div>
       </div>
     </main>
   )
