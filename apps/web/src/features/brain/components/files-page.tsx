@@ -1,8 +1,12 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useRef, type ChangeEvent, type DragEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2, FileText, Loader2 } from 'lucide-react'
 import { uploadBrainFile, type BrainFileSummary } from '../api'
-import { brainFileStatusOptions } from '../queries'
+import {
+  brainFileKeys,
+  brainFileListOptions,
+  brainFileStatusOptions,
+} from '../queries'
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
@@ -51,15 +55,20 @@ function BrainFileRow({ uploadedFile }: { uploadedFile: BrainFileSummary }) {
 
 export function BrainFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploadedFiles, setUploadedFiles] = useState<BrainFileSummary[]>([])
+  const queryClient = useQueryClient()
+  const filesQuery = useQuery(brainFileListOptions())
+  const files = filesQuery.data ?? []
 
   const uploadMutation = useMutation({
     mutationFn: uploadBrainFile,
     onSuccess: (uploadedFile) => {
-      setUploadedFiles((currentFiles) => [
-        uploadedFile,
-        ...currentFiles.filter((file) => file.id !== uploadedFile.id),
-      ])
+      queryClient.setQueryData<BrainFileSummary[]>(
+        brainFileKeys.list(),
+        (currentFiles = []) => [
+          uploadedFile,
+          ...currentFiles.filter((file) => file.id !== uploadedFile.id),
+        ],
+      )
     },
   })
 
@@ -139,12 +148,29 @@ export function BrainFilesPage() {
           </p>
         ) : null}
 
-        {uploadedFiles.length > 0 ? (
+        {filesQuery.isError ? (
+          <div className="mt-6 flex items-center gap-3 text-sm">
+            <p role="alert" className="text-destructive">
+              Could not load files.
+            </p>
+
+            <button
+              type="button"
+              disabled={filesQuery.isFetching}
+              className="font-medium text-foreground underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-70"
+              onClick={() => void filesQuery.refetch()}
+            >
+              {filesQuery.isFetching ? 'Trying...' : 'Try again'}
+            </button>
+          </div>
+        ) : null}
+
+        {files.length > 0 ? (
           <section className="mt-8 w-full max-w-xl">
             <h2 className="text-sm font-medium text-foreground">Files</h2>
 
             <ul className="mt-3 space-y-2" aria-live="polite">
-              {uploadedFiles.map((file) => (
+              {files.map((file) => (
                 <BrainFileRow key={file.id} uploadedFile={file} />
               ))}
             </ul>

@@ -6,9 +6,11 @@ import { BrainFilesPage } from './files-page'
 
 const mockUploadBrainFile = vi.hoisted(() => vi.fn())
 const mockGetBrainFile = vi.hoisted(() => vi.fn())
+const mockListBrainFiles = vi.hoisted(() => vi.fn())
 
 vi.mock('../api', () => ({
   getBrainFile: mockGetBrainFile,
+  listBrainFiles: mockListBrainFiles,
   uploadBrainFile: mockUploadBrainFile,
 }))
 
@@ -30,11 +32,55 @@ function renderFilesPage() {
 describe('BrainFilesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockListBrainFiles.mockResolvedValue([])
     mockGetBrainFile.mockResolvedValue({
       id: 'brain-file-1',
       name: 'notes.txt',
       status: 'processing',
     })
+  })
+
+  it('shows files stored in the workspace when the page loads', async () => {
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'stored-file-1',
+        name: 'saved-notes.txt',
+        status: 'ready',
+      },
+    ])
+
+    renderFilesPage()
+
+    expect(await screen.findByText('saved-notes.txt')).toBeInTheDocument()
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(mockListBrainFiles).toHaveBeenCalledOnce()
+  })
+
+  it('shows a list error and lets the user try again', async () => {
+    const user = userEvent.setup()
+
+    mockListBrainFiles.mockRejectedValueOnce(
+      new Error('Brain files are unavailable'),
+    )
+
+    renderFilesPage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load files.',
+    )
+
+    mockListBrainFiles.mockResolvedValueOnce([
+      {
+        id: 'recovered-file-1',
+        name: 'recovered-notes.txt',
+        status: 'ready',
+      },
+    ])
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('recovered-notes.txt')).toBeInTheDocument()
+    expect(mockListBrainFiles).toHaveBeenCalledTimes(2)
   })
 
   it('uploads a selected file and shows its processing state', async () => {

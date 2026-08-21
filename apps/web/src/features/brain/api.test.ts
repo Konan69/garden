@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { configureApi } from '@/lib/api/state'
-import { uploadBrainFile, getBrainFile } from './api'
+import { getBrainFile, listBrainFiles, uploadBrainFile } from './api'
 
 describe('uploadBrainFile', () => {
   afterEach(() => {
@@ -73,6 +73,43 @@ describe('getBrainFile', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock).toHaveBeenCalledWith(
       'https://garden.test/api/brain/files/brain-file-1',
+      expect.objectContaining({
+        credentials: 'include',
+      }),
+    )
+  })
+})
+
+describe('listBrainFiles', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gets the files stored in the active workspace', async () => {
+    const storedItems = [
+      {
+        id: 'brain-file-1',
+        name: 'notes.txt',
+        status: 'ready' as const,
+      },
+      {
+        id: 'brain-file-2',
+        name: 'report.pdf',
+        status: 'processing' as const,
+      },
+    ]
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(Response.json({ items: storedItems }))
+
+    configureApi('https://garden.test')
+
+    await expect(listBrainFiles()).resolves.toEqual(storedItems)
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files',
       expect.objectContaining({
         credentials: 'include',
       }),

@@ -12,6 +12,10 @@ interface BrainFileResponse {
   item: BrainFileSummary
 }
 
+interface BrainFileListResponse {
+  items: BrainFileSummary[]
+}
+
 export async function uploadBrainFile(file: File): Promise<BrainFileSummary> {
   const formData = new FormData()
   formData.set('file', file)
@@ -22,6 +26,13 @@ export async function uploadBrainFile(file: File): Promise<BrainFileSummary> {
   )
 
   return response.item
+}
+
+export async function listBrainFiles(): Promise<BrainFileSummary[]> {
+  const response =
+    await getApiTransport().request<BrainFileListResponse>('/api/brain/files')
+
+  return response.items
 }
 
 export async function getBrainFile(id: string): Promise<BrainFileSummary> {
