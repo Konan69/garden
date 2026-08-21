@@ -2,6 +2,8 @@ import { Effect, Layer, Result as EffectResult } from 'effect'
 import { createFileRoute } from '@tanstack/react-router'
 import { MAX_FILE_SIZE } from '@garden/core/constants/upload'
 import { normalizeDownloadFilename } from '@garden/agent-runtime'
+import { WorkspaceId } from '@garden/brain/domain'
+import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import { formatOf } from '@garden/brain/services/extractor'
 import {
@@ -29,6 +31,69 @@ function brainStorageKey(input: {
     input.itemId,
     normalizeDownloadFilename(input.filename),
   ].join('/')
+}
+
+/**
+ * Lists files stored in the active workspace. The response exposes only fields
+ * required by the Files page and disables caching so reloads show current state.
+ */
+export const getBrainFiles = async ({
+  context,
+}: {
+  context: AppRequestContext
+}): Promise<Response> => {
+  const appContext = requireAppRequestContext(context)
+  const workspaceContext = await requireWorkspaceContext(appContext)
+  if (workspaceContext instanceof Response) return workspaceContext
+
+  const env = appContext.env as AppEnv & {
+    HELIX_URL?: string
+    HELIX_API_KEY?: string
+  }
+  const helixUrl = env.HELIX_URL
+
+  if (helixUrl === undefined) {
+    return badRequest('Brain is not configured (missing HELIX_URL)')
+  }
+
+  const brainLive = makeWebBrainLive({
+    baseUrl: helixUrl,
+    apiKey: env.HELIX_API_KEY,
+    ai: env.AI,
+    files: env.FILES,
+  })
+
+  const listResult = await Effect.runPromise(
+    Effect.result(
+      Effect.flatMap(Brain, (brain) =>
+        brain.listFiles({
+          tenantId: WorkspaceId.make(workspaceContext.workspaceId),
+        }),
+      ).pipe(Effect.provide(brainLive)),
+    ),
+  )
+
+  if (EffectResult.isFailure(listResult)) {
+    return Response.json(
+      { error: 'Brain files are unavailable' },
+      { status: 503 },
+    )
+  }
+
+  return Response.json(
+    {
+      items: listResult.success.map((item) => ({
+        id: item.id,
+        name: item.label,
+        status: item.indexed ? 'ready' : 'processing',
+      })),
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+    },
+  )
 }
 
 /**
@@ -145,6 +210,7 @@ export const postBrainFileUpload = async ({
 export const Route = createFileRoute('/api/brain/files')({
   server: {
     handlers: {
+      GET: getBrainFiles,
       POST: postBrainFileUpload,
     },
   },

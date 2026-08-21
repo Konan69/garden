@@ -8,7 +8,7 @@ import { getBrainFileStatus } from './files/$id'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import type { AppRequestContext } from '@/lib/server/context'
-import { postBrainFileUpload } from './files'
+import { postBrainFileUpload, getBrainFiles } from './files'
 
 const FIXTURES = resolve(process.cwd(), '../../packages/brain/fixtures/docs')
 
@@ -108,6 +108,13 @@ vi.mock('@garden/brain/services/web', async () => {
               item !== undefined && item.tenantId === tenantId ? item : null,
             )
           },
+          listFiles: ({ tenantId, limit = 100 }) =>
+            Effect.succeed(
+              [...mockBrainItems.values()]
+                .filter((item) => item.tenantId === tenantId)
+                .sort((left, right) => left.label.localeCompare(right.label))
+                .slice(0, limit),
+            ),
           linkSections: () => Effect.die('unused linkSections'),
           sectionsOf: () => Effect.die('unused sectionsOf'),
           observeMention: () => Effect.die('unused observeMention'),
@@ -309,6 +316,29 @@ async function getFileStatus({
   })
 }
 
+async function getFiles(workspaceId = 'ws-status') {
+  const { bucket } = makeFiles()
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      FILES: bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  return getBrainFiles({
+    context: {} as AppRequestContext,
+  })
+}
+
 describe('POST /api/brain/files', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -507,5 +537,62 @@ describe('GET /api/brain/files/$id', () => {
     })
 
     expect(response.status).toBe(404)
+  })
+})
+
+describe('GET /api/brain/files', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('lists only files from the active workspace with public fields', async () => {
+    const processing = storeBrainFile({
+      indexed: false,
+      itemId: 'item-processing',
+    })
+    const ready = storeBrainFile({
+      indexed: true,
+      itemId: 'item-ready',
+    })
+
+    storeBrainFile({
+      indexed: true,
+      itemId: 'item-private',
+      workspaceId: 'workspace-other',
+    })
+
+    const response = await getFiles()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+
+    const body = (await response.json()) as {
+      items: Array<{
+        id: string
+        name: string
+        status: string
+      }>
+    }
+
+    expect(body.items).toEqual(
+      expect.arrayContaining([
+        {
+          id: processing.id,
+          name: processing.label,
+          status: 'processing',
+        },
+        {
+          id: ready.id,
+          name: ready.label,
+          status: 'ready',
+        },
+      ]),
+    )
+    expect(body.items).toHaveLength(2)
+
+    for (const item of body.items) {
+      expect(Object.keys(item).sort()).toEqual(['id', 'name', 'status'])
+    }
   })
 })
