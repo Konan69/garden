@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { configureApi } from '@/lib/api/state'
-import { uploadBrainFile } from './api'
+import { uploadBrainFile, getBrainFile } from './api'
 
 describe('uploadBrainFile', () => {
   afterEach(() => {
@@ -47,5 +47,35 @@ describe('uploadBrainFile', () => {
     expect(body).toBeInstanceOf(FormData)
     expect(body instanceof FormData && body.get('file')).toBe(file)
     expect(headers?.['Content-Type']).toBeUndefined()
+  })
+})
+
+describe('getBrainFile', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gets the latest file status', async () => {
+    const storedItem = {
+      id: 'brain-file-1',
+      name: 'notes.txt',
+      status: 'ready' as const,
+    }
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(Response.json({ item: storedItem }))
+
+    configureApi('https://garden.test')
+
+    await expect(getBrainFile('brain-file-1')).resolves.toEqual(storedItem)
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files/brain-file-1',
+      expect.objectContaining({
+        credentials: 'include',
+      }),
+    )
   })
 })

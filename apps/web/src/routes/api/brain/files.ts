@@ -115,18 +115,20 @@ export const postBrainFileUpload = async ({
   }
   const added = stageResult.success
 
-  const waitUntil = appContext.waitUntil ?? (() => {})
-  waitUntil(
-    Effect.runPromise(
-      Effect.flatMap(BrainFileIngestion, (ingestion) =>
-        ingestion.indexAndAudit({
-          itemId: added.id,
-          ownerUserId: workspaceContext.session.user.id,
-          workspaceId: workspaceContext.workspaceId,
-        }),
-      ).pipe(Effect.provide(ingestionLive)),
-    ),
-  )
+  if (!added.indexed) {
+    const waitUntil = appContext.waitUntil ?? (() => {})
+    waitUntil(
+      Effect.runPromise(
+        Effect.flatMap(BrainFileIngestion, (ingestion) =>
+          ingestion.indexAndAudit({
+            itemId: added.id,
+            ownerUserId: workspaceContext.session.user.id,
+            workspaceId: workspaceContext.workspaceId,
+          }),
+        ).pipe(Effect.provide(ingestionLive)),
+      ),
+    )
+  }
 
   return Response.json(
     {

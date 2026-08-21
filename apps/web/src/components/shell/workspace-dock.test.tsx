@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ButtonHTMLAttributes } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('@garden/app-state/workspace', () => ({
   useWorkspaceStore: (
@@ -93,11 +94,20 @@ function DockProbe() {
 }
 
 function renderDock({ view = false }: { view?: boolean } = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+
   return render(
-    <WorkspaceDockProvider workspaceId="workspace-1">
-      <DockProbe />
-      {view ? <WorkspaceDockView /> : null}
-    </WorkspaceDockProvider>,
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceDockProvider workspaceId="workspace-1">
+        <DockProbe />
+        {view ? <WorkspaceDockView /> : null}
+      </WorkspaceDockProvider>
+    </QueryClientProvider>,
   )
 }
 
