@@ -1,0 +1,51 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { configureApi } from '@/lib/api/state'
+import { uploadBrainFile } from './api'
+
+describe('uploadBrainFile', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('uploads the selected file as multipart form data', async () => {
+    const uploadedItem = {
+      id: 'brain-file-1',
+      name: 'notes.txt',
+      status: 'processing' as const,
+    }
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json(
+        {
+          item: uploadedItem,
+        },
+        { status: 201 },
+      ),
+    )
+
+    configureApi('https://garden.test')
+
+    const file = new File(['Garden notes'], 'notes.txt', {
+      type: 'text/plain',
+    })
+
+    await expect(uploadBrainFile(file)).resolves.toEqual(uploadedItem)
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+      }),
+    )
+
+    const request = fetchMock.mock.calls[0]?.[1]
+    const body = request?.body
+    const headers = request?.headers as Record<string, string> | undefined
+
+    expect(body).toBeInstanceOf(FormData)
+    expect(body instanceof FormData && body.get('file')).toBe(file)
+    expect(headers?.['Content-Type']).toBeUndefined()
+  })
+})

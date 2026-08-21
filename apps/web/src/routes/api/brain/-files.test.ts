@@ -258,8 +258,18 @@ describe('POST /api/brain/files', () => {
     })
     expect(response.status, await response.clone().text()).toBe(201)
     await Promise.all(deferred)
-    const { item } = (await response.json()) as { item: { id: string } }
+    const { item } = (await response.json()) as {
+      item: {
+        id: string
+        name: string
+        status: string
+      }
+    }
+
     expect(item.id).toBeTruthy()
+    expect(item.name).toBe('helixdb.pdf')
+    expect(item.status).toBe('processing')
+    expect(Object.keys(item).sort()).toEqual(['id', 'name', 'status'])
     expect(objects.size).toBe(1)
     expect([...objects.keys()][0]).toContain(workspaceId)
 

@@ -128,7 +128,16 @@ export const postBrainFileUpload = async ({
     ),
   )
 
-  return Response.json({ item: added }, { status: 201 })
+  return Response.json(
+    {
+      item: {
+        id: added.id,
+        name: added.label,
+        status: added.indexed ? 'ready' : 'processing',
+      },
+    },
+    { status: 201 },
+  )
 }
 
 export const Route = createFileRoute('/api/brain/files')({
