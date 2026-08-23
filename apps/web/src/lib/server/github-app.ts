@@ -26,7 +26,8 @@ type GitHubAppEnv = Pick<
 
 type GitHubAppDatabase = Db
 
-function normalizeGitHubAppEnv(env: GitHubAppEnv) {
+/** Normalizes private keys stored as JSON-quoted Worker secrets before signing. */
+export function normalizeGitHubAppEnv(env: GitHubAppEnv) {
   const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim()
 
   return {

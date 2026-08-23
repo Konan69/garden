@@ -236,10 +236,7 @@ export const Route = createFileRoute('/api/connections/$connectorId')({
             return notFound('GitHub App installation not found')
           }
 
-          if (
-            bodyResult.value.action === 'delete' ||
-            bodyResult.value.action === 'disconnect'
-          ) {
+          if (bodyResult.value.action === 'delete') {
             const uninstalled = await deleteGitHubAppInstallation({
               env: {
                 GITHUB_APP_ID: appEnv.GITHUB_APP_ID,
@@ -259,6 +256,12 @@ export const Route = createFileRoute('/api/connections/$connectorId')({
                 { status: 502 },
               )
             }
+          }
+
+          if (
+            bodyResult.value.action === 'delete' ||
+            bodyResult.value.action === 'disconnect'
+          ) {
             await db
               .delete(schema.githubAppInstallation)
               .where(
@@ -274,6 +277,7 @@ export const Route = createFileRoute('/api/connections/$connectorId')({
               properties: {
                 connector_id: 'github',
                 connection_kind: 'github_app',
+                action: bodyResult.value.action,
               },
             })
             return Response.json({ ok: true })

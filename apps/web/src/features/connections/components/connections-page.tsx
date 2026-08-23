@@ -278,7 +278,9 @@ export function ConnectionsPage({
         return
       }
       if (integration.providerId === 'github.com') {
-        window.location.assign('/api/github/install')
+        const url = new URL('/api/github/install', window.location.origin)
+        url.searchParams.set('connector_flow', crypto.randomUUID())
+        window.location.assign(url.toString())
         return
       }
       connectionMutation.mutate({ slug: integration.slug, action: 'connect' })
@@ -1095,6 +1097,9 @@ function ManageDrawerBody({
     (connection) => connection.owner === owner,
   )
   const connectedInScope = visibleConnections.length > 0
+  const githubNeedsRepair =
+    activeIntegration.providerId === 'github.com' &&
+    activeIntegration.status === 'degraded'
   const previewQuery = useQuery({
     queryKey: ['executor-tool-preview', entry.providerId, source],
     queryFn: () => previewIntegrationTools({ entry, source }),
@@ -1275,6 +1280,25 @@ function ManageDrawerBody({
       </DrawerHeader>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        {githubNeedsRepair ? (
+          <section className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/8 p-4">
+            <h3 className="text-sm font-semibold text-foreground">
+              GitHub installation needs repair
+            </h3>
+            <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+              Reconnect the GitHub App to replace the stale installation without
+              changing repository access.
+            </p>
+            <Button
+              className="mt-3"
+              size="sm"
+              disabled={pending}
+              onClick={() => onConnect(activeIntegration)}
+            >
+              Repair GitHub App
+            </Button>
+          </section>
+        ) : null}
         <Tabs
           value={source}
           onValueChange={(value) => {

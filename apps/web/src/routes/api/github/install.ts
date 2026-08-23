@@ -17,8 +17,10 @@ import {
 import {
   buildGitHubAppInstallUrl,
   createGitHubSetupState,
+  normalizeGitHubAppEnv,
   resolveGitHubAppSlug,
 } from '@/lib/server/github-app'
+import { getGitHubAppInstallation } from '@garden/connectors/github-app'
 
 function readConnectorFlowId(request: Request) {
   const value = new URL(request.url).searchParams.get('connector_flow')?.trim()
@@ -39,12 +41,15 @@ function redirectToGitHubPanel(request: Request, flowId?: string | null) {
 
 type GitHubInstallDb = Db
 
-async function hasConnectedGitHubInstall(args: {
+async function getConnectedGitHubInstall(args: {
   db: GitHubInstallDb
   workspaceId: string
 }) {
   const [installation] = await args.db
-    .select({ id: schema.githubAppInstallation.id })
+    .select({
+      id: schema.githubAppInstallation.id,
+      installationId: schema.githubAppInstallation.installationId,
+    })
     .from(schema.githubAppInstallation)
     .where(
       and(
@@ -54,7 +59,7 @@ async function hasConnectedGitHubInstall(args: {
     )
     .limit(1)
 
-  return Boolean(installation)
+  return installation ?? null
 }
 
 export const Route = createFileRoute('/api/github/install')({
@@ -70,7 +75,18 @@ export const Route = createFileRoute('/api/github/install')({
         const flowId = readConnectorFlowId(request)
         const db = await appContext.db()
 
-        if (await hasConnectedGitHubInstall({ db, workspaceId })) {
+        const connectedInstallation = await getConnectedGitHubInstall({
+          db,
+          workspaceId,
+        })
+        const verifiedInstallation = connectedInstallation
+          ? await getGitHubAppInstallation({
+              env: normalizeGitHubAppEnv(appEnv),
+              installationId: connectedInstallation.installationId,
+            })
+          : null
+
+        if (connectedInstallation && verifiedInstallation?.isOk()) {
           const event = await recordConnectorCallbackEvent({
             db,
             userId: session.user.id,
@@ -94,6 +110,15 @@ export const Route = createFileRoute('/api/github/install')({
                   ),
               }),
           })
+        }
+
+        if (connectedInstallation && verifiedInstallation?.isErr()) {
+          await db
+            .update(schema.githubAppInstallation)
+            .set({ status: 'degraded', updatedAt: new Date() })
+            .where(
+              eq(schema.githubAppInstallation.id, connectedInstallation.id),
+            )
         }
 
         return new Response(null, {

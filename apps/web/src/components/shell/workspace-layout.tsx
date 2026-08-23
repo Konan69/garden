@@ -1,8 +1,15 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2, CircleAlert } from 'lucide-react'
 import { useAuthStore } from '@garden/app-state/auth'
 import { useWorkspaceStore } from '@garden/app-state/workspace'
 import { Button } from '@garden/ui/components/ui/button'
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from '@garden/ui/components/ui/alert'
 import { SidebarInset, SidebarProvider } from '@garden/ui/components/ui/sidebar'
 import { Skeleton } from '@garden/ui/components/ui/skeleton'
 import { SearchCommand } from '@/features/search'
@@ -10,14 +17,20 @@ import { ChatRuntimeProvider } from '@/features/chat/chat-runtime-provider'
 import { CreateWorkspaceModal } from '@/features/modals/create-workspace'
 import { SettingsDialog } from '@/features/settings'
 import { IssueDeepLinkListener } from '@/features/issues/components/issue-deep-link-listener'
+import { getConnectorCallbackEvent } from '@/lib/api/connections'
 import {
   agentListOptions,
   connectionListOptions,
   memberListOptions,
   skillListOptions,
+  workspaceKeys,
 } from '@/lib/workspace/queries'
 import { WorkspaceSidebar } from './sidebar'
-import { WorkspaceDockProvider, WorkspaceDockView } from './workspace-dock'
+import {
+  useRequiredWorkspaceDock,
+  WorkspaceDockProvider,
+  WorkspaceDockView,
+} from './workspace-dock'
 
 /**
  * Mount-only prefetch for workspace-wide caches.
@@ -83,7 +96,95 @@ function WorkspaceSetupState({ onCreate }: { onCreate: () => void }) {
   )
 }
 
+/** Shows connector callback outcomes at the workspace boundary where redirects land. */
+function ConnectorCallbackNotice({
+  connectorFlowId,
+  connectorId,
+  workspaceId,
+}: {
+  connectorFlowId?: string | null
+  connectorId?: string | null
+  workspaceId: string
+}) {
+  const [dismissed, setDismissed] = useState(false)
+  const dock = useRequiredWorkspaceDock()
+  const queryClient = useQueryClient()
+  const flowId = connectorFlowId?.trim() ?? ''
+  const callback = useQuery({
+    queryKey: ['connector-callback-event', flowId, connectorId ?? null],
+    queryFn: () =>
+      getConnectorCallbackEvent({ flowId, connectorId: connectorId ?? null }),
+    enabled: flowId.length > 0,
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  if (!flowId || dismissed) return null
+
+  const event = callback.data?.event
+  const failed = callback.isError || event?.status === 'error'
+  const title = callback.isPending
+    ? 'Finishing connection'
+    : failed
+      ? 'Connection needs attention'
+      : event?.status === 'degraded'
+        ? `${event.connectorLabel} needs attention`
+        : `${event?.connectorLabel ?? 'Connection'} connected`
+  const description = callback.isPending
+    ? 'Checking the provider callback status.'
+    : callback.isError
+      ? 'Open Connections to review the provider status and repair it.'
+      : (event?.message ?? 'Provider access is ready.')
+
+  const dismissNotice = () => {
+    setDismissed(true)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('connector_flow')
+    url.searchParams.delete('connector_id')
+    window.history.replaceState(window.history.state, '', url.toString())
+  }
+
+  return (
+    <Alert
+      variant={failed ? 'destructive' : 'default'}
+      className="absolute top-3 right-3 z-50 w-[min(28rem,calc(100%-1.5rem))] bg-background/95 pr-28 shadow-lg backdrop-blur"
+    >
+      {failed || event?.status === 'degraded' ? (
+        <CircleAlert className="size-4" />
+      ) : (
+        <CheckCircle2 className="size-4" />
+      )}
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{description}</AlertDescription>
+      <AlertAction className="flex gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={async () => {
+            await queryClient.invalidateQueries({
+              queryKey: workspaceKeys.connections(workspaceId),
+            })
+            dismissNotice()
+            dock.openPanel({
+              kind: 'capabilities',
+              title: 'Connections',
+              entityId: connectorId ?? event?.connectorId,
+            })
+          }}
+        >
+          Open
+        </Button>
+        <Button size="sm" variant="ghost" onClick={dismissNotice}>
+          Dismiss
+        </Button>
+      </AlertAction>
+    </Alert>
+  )
+}
+
 export function WorkspaceLayout({
+  connectorFlowId = null,
+  connectorId = null,
   issueId = null,
 }: {
   connectorFlowId?: string | null
@@ -113,6 +214,11 @@ export function WorkspaceLayout({
             <IssueDeepLinkListener
               workspaceId={activeWorkspaceId}
               issueId={issueId}
+            />
+            <ConnectorCallbackNotice
+              connectorFlowId={connectorFlowId}
+              connectorId={connectorId}
+              workspaceId={activeWorkspaceId}
             />
             <ChatRuntimeProvider>
               <WorkspaceSidebar
