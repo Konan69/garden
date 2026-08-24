@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent, type DragEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2, FileText, Loader2 } from 'lucide-react'
 import { uploadBrainFile, type BrainFileSummary } from '../api'
@@ -7,24 +7,38 @@ import {
   brainFileListOptions,
   brainFileStatusOptions,
 } from '../queries'
+import { BrainFilePreviewDialog } from './file-preview-dialog'
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
-function BrainFileCard({ uploadedFile }: { uploadedFile: BrainFileSummary }) {
+function BrainFileCard({
+  onPreview,
+  uploadedFile,
+}: {
+  onPreview: (file: BrainFileSummary) => void
+  uploadedFile: BrainFileSummary
+}) {
   const statusQuery = useQuery(
     brainFileStatusOptions(uploadedFile.id, uploadedFile.status),
   )
   const file = statusQuery.data ?? uploadedFile
+  const canPreview = file.status === 'ready' && !statusQuery.isError
 
   return (
     <li className="flex min-h-[7.125rem] w-full flex-col justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 sm:w-[11.625rem]">
-      <div className="flex w-full min-w-0 items-start gap-2.5">
+      <button
+        type="button"
+        disabled={!canPreview}
+        onClick={() => onPreview(file)}
+        aria-label={`Preview ${file.name}`}
+        className="flex w-full min-w-0 cursor-pointer items-start gap-2.5 text-left disabled:cursor-default"
+      >
         <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
 
-        <p className="min-w-0 truncate text-sm font-medium text-foreground">
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">
           {file.name}
-        </p>
-      </div>
+        </span>
+      </button>
 
       {statusQuery.isError ? (
         <div className="mt-3 text-xs">
@@ -55,6 +69,7 @@ function BrainFileCard({ uploadedFile }: { uploadedFile: BrainFileSummary }) {
 
 export function BrainFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [previewFile, setPreviewFile] = useState<BrainFileSummary | null>(null)
   const queryClient = useQueryClient()
   const filesQuery = useQuery(brainFileListOptions())
   const files = filesQuery.data ?? []
@@ -142,7 +157,11 @@ export function BrainFilesPage() {
                   aria-live="polite"
                 >
                   {files.map((file) => (
-                    <BrainFileCard key={file.id} uploadedFile={file} />
+                    <BrainFileCard
+                      key={file.id}
+                      uploadedFile={file}
+                      onPreview={setPreviewFile}
+                    />
                   ))}
                 </ul>
               ) : null}
@@ -180,6 +199,12 @@ export function BrainFilesPage() {
               </div>
             ) : null}
           </section>
+          {previewFile ? (
+            <BrainFilePreviewDialog
+              file={previewFile}
+              onClose={() => setPreviewFile(null)}
+            />
+          ) : null}
         </div>
       </div>
     </main>

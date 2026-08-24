@@ -1,5 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
-import { getBrainFile, listBrainFiles, type BrainFileStatus } from './api'
+import {
+  getBrainFile,
+  getBrainFileText,
+  listBrainFiles,
+  type BrainFileStatus,
+} from './api'
 
 const FILE_STATUS_POLL_INTERVAL_MS = 2_000
 
@@ -7,6 +12,7 @@ export const brainFileKeys = {
   all: ['brain', 'files'] as const,
   list: () => [...brainFileKeys.all, 'list'] as const,
   detail: (id: string) => [...brainFileKeys.all, id] as const,
+  content: (id: string) => [...brainFileKeys.detail(id), 'content'] as const,
 }
 
 export function brainFileListOptions() {
@@ -33,5 +39,13 @@ export function brainFileStatusOptions(
         : false
     },
     refetchOnWindowFocus: true,
+  })
+}
+
+export function brainFileTextOptions(id: string) {
+  return queryOptions({
+    queryKey: brainFileKeys.content(id),
+    queryFn: () => getBrainFileText(id),
+    staleTime: Infinity,
   })
 }

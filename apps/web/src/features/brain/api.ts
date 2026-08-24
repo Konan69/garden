@@ -42,3 +42,25 @@ export async function getBrainFile(id: string): Promise<BrainFileSummary> {
 
   return response.item
 }
+
+/**
+ * Loads plain-text file content through the workspace-scoped content route.
+ * The normal API transport expects JSON, so this narrow client keeps the same
+ * credentials and active-workspace header while reading the response as text.
+ */
+export async function getBrainFileText(id: string): Promise<string> {
+  const transport = getApiTransport()
+  const workspaceId = transport.getWorkspaceId()
+  const response = await fetch(
+    `${transport.getBaseUrl()}/api/brain/files/${encodeURIComponent(id)}/content`,
+    {
+      credentials: 'include',
+      headers: workspaceId ? { 'X-Workspace-ID': workspaceId } : undefined,
+    },
+  )
+
+  if (response.status === 401) transport.notifyUnauthorized()
+  if (!response.ok) throw new Error('Could not load file preview.')
+
+  return response.text()
+}

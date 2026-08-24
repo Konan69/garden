@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { Effect, Layer, ManagedRuntime, DateTime } from 'effect'
 import { ItemId, WorkspaceId, type BrainItem, Kind } from '@garden/brain/domain'
 import { getBrainFileStatus } from './files/$id'
+import { getBrainFileContent } from './files/$id/content'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import type { AppRequestContext } from '@/lib/server/context'
@@ -264,10 +265,12 @@ async function upload({
 function storeBrainFile({
   indexed,
   itemId = 'item-status',
+  r2Key = 'brain-files/ws-status/notes.txt',
   workspaceId = 'ws-status',
 }: {
   indexed: boolean
   itemId?: string
+  r2Key?: string | undefined
   workspaceId?: string
 }) {
   const item: BrainItem = {
@@ -275,6 +278,7 @@ function storeBrainFile({
     tenantId: WorkspaceId.make(workspaceId),
     kind: Kind.make('file'),
     label: 'notes.txt',
+    ...(r2Key === undefined ? {} : { r2Key }),
     indexed,
     origin: {
       actor: { _tag: 'Human', userId: 'user-route' },
@@ -314,6 +318,53 @@ async function getFileStatus({
     context: {} as AppRequestContext,
     params: { id: itemId },
   })
+}
+
+async function getFileContent({
+  itemId = 'item-status',
+  objectBody = 'Garden notes',
+  workspaceId = 'ws-status',
+}: {
+  itemId?: string
+  objectBody?: string | null
+  workspaceId?: string
+} = {}) {
+  const get = vi.fn(async () => {
+    if (objectBody === null) return null
+
+    return {
+      body: new Response(objectBody).body,
+      httpEtag: '"brain-file-etag"',
+      writeHttpMetadata: (headers: Headers) => {
+        headers.set('Content-Type', 'text/plain')
+      },
+    }
+  })
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      FILES: { get },
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  const response = await getBrainFileContent({
+    context: {} as AppRequestContext,
+    request: new Request(
+      `https://garden.test/api/brain/files/${itemId}/content`,
+    ),
+    params: { id: itemId },
+  })
+
+  return { get, response }
 }
 
 async function getFiles(workspaceId = 'ws-status') {
@@ -534,6 +585,51 @@ describe('GET /api/brain/files/$id', () => {
 
     const response = await getFileStatus({
       workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+  })
+})
+
+describe('GET /api/brain/files/$id/content', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('streams file content from R2 with safe response headers', async () => {
+    const item = storeBrainFile({ indexed: true })
+
+    const { get, response } = await getFileContent()
+
+    expect(response.status).toBe(200)
+    expect(get).toHaveBeenCalledWith(item.r2Key)
+    expect(response.headers.get('Content-Type')).toBe('text/plain')
+    expect(response.headers.get('Content-Disposition')).toBe('inline')
+    expect(response.headers.get('ETag')).toBe('"brain-file-etag"')
+    expect(response.headers.get('Cache-Control')).toBe('private, max-age=3600')
+    expect(await response.text()).toBe('Garden notes')
+  })
+
+  it('does not read content from another workspace', async () => {
+    storeBrainFile({
+      indexed: true,
+      workspaceId: 'workspace-one',
+    })
+
+    const { get, response } = await getFileContent({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('returns not found when the R2 object is missing', async () => {
+    storeBrainFile({ indexed: true })
+
+    const { response } = await getFileContent({
+      objectBody: null,
     })
 
     expect(response.status).toBe(404)

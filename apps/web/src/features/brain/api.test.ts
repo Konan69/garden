@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { configureApi } from '@/lib/api/state'
-import { getBrainFile, listBrainFiles, uploadBrainFile } from './api'
+import {
+  getBrainFile,
+  getBrainFileText,
+  listBrainFiles,
+  uploadBrainFile,
+} from './api'
 
 describe('uploadBrainFile', () => {
   afterEach(() => {
@@ -113,6 +118,32 @@ describe('listBrainFiles', () => {
       expect.objectContaining({
         credentials: 'include',
       }),
+    )
+  })
+})
+
+describe('getBrainFileText', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gets text content with the active workspace context', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('Garden preview notes'))
+    const transport = configureApi('https://garden.test')
+    transport.setWorkspaceId('workspace-1')
+
+    await expect(getBrainFileText('brain-file-1')).resolves.toBe(
+      'Garden preview notes',
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files/brain-file-1/content',
+      {
+        credentials: 'include',
+        headers: { 'X-Workspace-ID': 'workspace-1' },
+      },
     )
   })
 })
