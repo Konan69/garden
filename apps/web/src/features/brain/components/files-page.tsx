@@ -70,12 +70,14 @@ function BrainFileCard({
 export function BrainFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [previewFile, setPreviewFile] = useState<BrainFileSummary | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const queryClient = useQueryClient()
   const filesQuery = useQuery(brainFileListOptions())
   const files = filesQuery.data ?? []
 
   const uploadMutation = useMutation({
-    mutationFn: uploadBrainFile,
+    mutationFn: (file: File) => uploadBrainFile(file, setUploadProgress),
+    onMutate: () => setUploadProgress(0),
     onSuccess: (uploadedFile) => {
       queryClient.setQueryData<BrainFileSummary[]>(
         brainFileKeys.list(),
@@ -85,6 +87,7 @@ export function BrainFilesPage() {
         ],
       )
     },
+    onSettled: () => setUploadProgress(0),
   })
 
   const startUpload = (file: File | undefined) => {
@@ -142,13 +145,35 @@ export function BrainFilesPage() {
 
                 <span className="mt-3 text-sm font-medium text-foreground">
                   {uploadMutation.isPending
-                    ? 'Uploading your document...'
+                    ? `Uploading ${uploadProgress}%`
                     : 'Add your documents or drag and drop them here'}
                 </span>
 
-                <span className="mt-2 text-xs text-muted-foreground">
-                  TXT, MD, PDF, DOCX, and XLSX, up to 100 MB
-                </span>
+                {uploadMutation.isPending ? (
+                  <>
+                    <span className="mt-2 max-w-full truncate text-xs text-muted-foreground">
+                      {uploadMutation.variables?.name ?? 'Document'}
+                    </span>
+
+                    <span
+                      role="progressbar"
+                      aria-label={`Uploading ${uploadMutation.variables?.name ?? 'document'}`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={uploadProgress}
+                      className="mt-3 h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-border"
+                    >
+                      <span
+                        className="block h-full rounded-full bg-foreground transition-[width]"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </span>
+                  </>
+                ) : (
+                  <span className="mt-2 text-xs text-muted-foreground">
+                    TXT, MD, PDF, DOCX, and XLSX, up to 100 MB
+                  </span>
+                )}
               </button>
 
               {files.length > 0 ? (

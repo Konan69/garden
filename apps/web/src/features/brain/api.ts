@@ -16,14 +16,19 @@ interface BrainFileListResponse {
   items: BrainFileSummary[]
 }
 
-export async function uploadBrainFile(file: File): Promise<BrainFileSummary> {
+export async function uploadBrainFile(
+  file: File,
+  onProgress?: (percentage: number) => void,
+): Promise<BrainFileSummary> {
   const formData = new FormData()
   formData.set('file', file)
 
-  const response = await getApiTransport().requestForm<BrainFileResponse>(
-    '/api/brain/files',
-    formData,
-  )
+  const response =
+    await getApiTransport().requestFormWithProgress<BrainFileResponse>(
+      '/api/brain/files',
+      formData,
+      onProgress,
+    )
 
   return response.item
 }

@@ -10,48 +10,84 @@ import {
 describe('uploadBrainFile', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
-  it('uploads the selected file as multipart form data', async () => {
+  it('uploads the file and reports byte-level progress', async () => {
     const uploadedItem = {
       id: 'brain-file-1',
       name: 'notes.txt',
       status: 'processing' as const,
     }
+    const onProgress = vi.fn()
 
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json(
-        {
-          item: uploadedItem,
-        },
-        { status: 201 },
-      ),
-    )
+    class FakeXMLHttpRequest {
+      static instance: FakeXMLHttpRequest | null = null
 
-    configureApi('https://garden.test')
+      upload = {
+        onprogress: null as ((event: ProgressEvent) => void) | null,
+      }
+
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      onabort: (() => void) | null = null
+
+      status = 201
+      statusText = 'Created'
+      responseText = JSON.stringify({ item: uploadedItem })
+      withCredentials = false
+
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+
+      send = vi.fn((body: XMLHttpRequestBodyInit | null) => {
+        expect(body).toBeInstanceOf(FormData)
+
+        this.upload.onprogress?.({
+          lengthComputable: true,
+          loaded: 42,
+          total: 100,
+        } as ProgressEvent)
+
+        this.onload?.()
+      })
+
+      constructor() {
+        FakeXMLHttpRequest.instance = this
+      }
+    }
+
+    vi.stubGlobal('XMLHttpRequest', FakeXMLHttpRequest)
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(Response.json({ item: uploadedItem }, { status: 201 }))
+
+    const transport = configureApi('https://garden.test')
+    transport.setWorkspaceId('workspace-1')
 
     const file = new File(['Garden notes'], 'notes.txt', {
       type: 'text/plain',
     })
 
-    await expect(uploadBrainFile(file)).resolves.toEqual(uploadedItem)
-
-    expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://garden.test/api/brain/files',
-      expect.objectContaining({
-        method: 'POST',
-        credentials: 'include',
-      }),
+    await expect(uploadBrainFile(file, onProgress)).resolves.toEqual(
+      uploadedItem,
     )
 
-    const request = fetchMock.mock.calls[0]?.[1]
-    const body = request?.body
-    const headers = request?.headers as Record<string, string> | undefined
+    expect(onProgress).toHaveBeenCalledWith(42)
+    expect(fetchMock).not.toHaveBeenCalled()
 
-    expect(body).toBeInstanceOf(FormData)
-    expect(body instanceof FormData && body.get('file')).toBe(file)
-    expect(headers?.['Content-Type']).toBeUndefined()
+    const xhr = FakeXMLHttpRequest.instance
+
+    expect(xhr?.open).toHaveBeenCalledWith(
+      'POST',
+      'https://garden.test/api/brain/files',
+    )
+    expect(xhr?.withCredentials).toBe(true)
+    expect(xhr?.setRequestHeader).toHaveBeenCalledWith(
+      'X-Workspace-ID',
+      'workspace-1',
+    )
   })
 })
 

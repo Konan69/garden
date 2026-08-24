@@ -212,6 +212,32 @@ describe('BrainFilesPage', () => {
     expect(mockListBrainFiles).toHaveBeenCalledTimes(2)
   })
 
+  it('shows byte-level progress while a file uploads', async () => {
+    const user = userEvent.setup()
+    const file = new File(['Garden notes'], 'notes.txt', {
+      type: 'text/plain',
+    })
+
+    mockUploadBrainFile.mockImplementationOnce(
+      (_file: File, onProgress: (percentage: number) => void) => {
+        onProgress(42)
+        return new Promise(() => {})
+      },
+    )
+
+    renderFilesPage()
+
+    await user.upload(
+      screen.getByLabelText('Choose a document to upload'),
+      file,
+    )
+
+    expect(await screen.findByText('Uploading 42%')).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: 'Uploading notes.txt' }),
+    ).toHaveAttribute('aria-valuenow', '42')
+  })
+
   it('uploads a selected file and shows its processing state', async () => {
     const user = userEvent.setup()
     const file = new File(['Garden notes'], 'notes.txt', {
