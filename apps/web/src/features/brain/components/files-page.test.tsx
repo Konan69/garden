@@ -276,6 +276,60 @@ describe('BrainFilesPage', () => {
     expect(mockGetBrainFileExtractedText).toHaveBeenCalledWith('stored-docx-1')
   })
 
+  it('shows XLSX sheets and changes the selected sheet', async () => {
+    const user = userEvent.setup()
+
+    mockGetBrainFileExtractedText.mockResolvedValueOnce(
+      [
+        '## Revenue',
+        '',
+        'Month\tRevenue',
+        'January\t1000',
+        'February\t1250',
+        '',
+        '## Expenses',
+        '',
+        'Category\tAmount',
+        'Hosting\t200',
+      ].join('\n'),
+    )
+
+    renderFilesPage([
+      {
+        id: 'stored-xlsx-1',
+        name: 'quarterly-report.xlsx',
+        status: 'ready',
+      },
+    ])
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Preview quarterly-report.xlsx',
+      }),
+    )
+
+    const dialog = screen.getByRole('dialog')
+    const sheetNavigation = await within(dialog).findByRole('tablist', {
+      name: 'Spreadsheet sheets',
+    })
+
+    expect(
+      within(dialog).getByRole('table', { name: 'Revenue' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('January')).toBeInTheDocument()
+    expect(within(dialog).getByText('1000')).toBeInTheDocument()
+
+    await user.click(
+      within(sheetNavigation).getByRole('tab', { name: 'Expenses' }),
+    )
+
+    expect(
+      within(dialog).getByRole('table', { name: 'Expenses' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('Hosting')).toBeInTheDocument()
+    expect(mockGetBrainFileExtractedText).toHaveBeenCalledWith('stored-xlsx-1')
+  })
+
   it('uses the designed upload and file tile dimensions', async () => {
     renderFilesPage([
       {

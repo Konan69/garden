@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { PdfFilePreview } from './pdf-file-preview'
+import { XlsxFilePreview } from './xlsx-file-preview'
 import { Download, FileText, Loader2, X } from 'lucide-react'
 import { Button, buttonVariants } from '@garden/ui/components/ui/button'
 import { Markdown } from '@garden/ui/markdown'
@@ -13,13 +14,14 @@ import {
 import type { BrainFileSummary } from '../api'
 import { brainFileExtractedTextOptions, brainFileTextOptions } from '../queries'
 
-type PreviewKind = 'docx' | 'pdf' | 'text' | 'unavailable'
+type PreviewKind = 'docx' | 'pdf' | 'text' | 'xlsx' | 'unavailable'
 
 function previewKind(filename: string): PreviewKind {
   const normalizedName = filename.toLowerCase()
 
   if (normalizedName.endsWith('.pdf')) return 'pdf'
   if (normalizedName.endsWith('.docx')) return 'docx'
+  if (normalizedName.endsWith('.xlsx')) return 'xlsx'
   if (normalizedName.endsWith('.md') || normalizedName.endsWith('.txt'))
     return 'text'
 
@@ -109,8 +111,8 @@ function DocxFilePreview({ fileId }: { fileId: string }) {
 
 /**
  * Shows a workspace file through the authenticated Brain content route.
- * PDF, DOCX, TXT, and MD files render inline. Other supported files keep a
- * clear download path when Garden cannot render them in the browser.
+ * PDF, DOCX, XLSX, TXT, and MD files render inline. Other supported files keep
+ * a clear download path when Garden cannot render them in the browser.
  */
 export function BrainFilePreviewDialog({
   file,
@@ -157,6 +159,8 @@ export function BrainFilePreviewDialog({
             <TextFilePreview fileId={file.id} />
           ) : kind === 'docx' ? (
             <DocxFilePreview fileId={file.id} />
+          ) : kind === 'xlsx' ? (
+            <XlsxFilePreview fileId={file.id} />
           ) : kind === 'pdf' ? (
             <PdfFilePreview fileId={file.id} />
           ) : (
