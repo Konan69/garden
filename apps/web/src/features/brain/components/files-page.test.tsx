@@ -23,6 +23,7 @@ import { BrainFilesPage } from './files-page'
 const mockUploadBrainFile = vi.hoisted(() => vi.fn())
 const mockGetBrainFile = vi.hoisted(() => vi.fn())
 const mockGetBrainFileText = vi.hoisted(() => vi.fn())
+const mockGetBrainFileExtractedText = vi.hoisted(() => vi.fn())
 const mockListBrainFiles = vi.hoisted(() => vi.fn())
 const mockGetBrainFileBytes = vi.hoisted(() => vi.fn())
 const mockPdfGetDocument = vi.hoisted(() => vi.fn())
@@ -30,6 +31,7 @@ const mockPdfGetDocument = vi.hoisted(() => vi.fn())
 vi.mock('../api', () => ({
   getBrainFile: mockGetBrainFile,
   getBrainFileText: mockGetBrainFileText,
+  getBrainFileExtractedText: mockGetBrainFileExtractedText,
   listBrainFiles: mockListBrainFiles,
   uploadBrainFile: mockUploadBrainFile,
   getBrainFileBytes: mockGetBrainFileBytes,
@@ -76,6 +78,9 @@ describe('BrainFilesPage', () => {
     vi.clearAllMocks()
     mockListBrainFiles.mockResolvedValue([])
     mockGetBrainFileText.mockResolvedValue('Garden preview notes')
+    mockGetBrainFileExtractedText.mockResolvedValue(
+      '# Quarterly report\n\nRevenue increased.',
+    )
     mockGetBrainFile.mockResolvedValue({
       id: 'brain-file-1',
       name: 'notes.txt',
@@ -241,6 +246,34 @@ describe('BrainFilesPage', () => {
 
     expect(within(dialog).getByText('Page 2 of 2')).toBeInTheDocument()
     expect(mockGetBrainFileBytes).toHaveBeenCalledWith('stored-pdf-1')
+  })
+
+  it('shows extracted DOCX content in the preview', async () => {
+    const user = userEvent.setup()
+
+    renderFilesPage([
+      {
+        id: 'stored-docx-1',
+        name: 'quarterly-report.docx',
+        status: 'ready',
+      },
+    ])
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Preview quarterly-report.docx',
+      }),
+    )
+
+    const dialog = screen.getByRole('dialog')
+
+    expect(
+      await within(dialog).findByRole('heading', {
+        name: 'Quarterly report',
+      }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('Revenue increased.')).toBeInTheDocument()
+    expect(mockGetBrainFileExtractedText).toHaveBeenCalledWith('stored-docx-1')
   })
 
   it('uses the designed upload and file tile dimensions', async () => {

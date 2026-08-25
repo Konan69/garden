@@ -71,6 +71,28 @@ export async function getBrainFileText(id: string): Promise<string> {
 }
 
 /**
+ * Loads the text that Brain extracted from a document.
+ * DOCX and XLSX previews use this text instead of loading the original bytes
+ * into the browser.
+ */
+export async function getBrainFileExtractedText(id: string): Promise<string> {
+  const transport = getApiTransport()
+  const workspaceId = transport.getWorkspaceId()
+  const response = await fetch(
+    `${transport.getBaseUrl()}/api/brain/files/${encodeURIComponent(id)}/text`,
+    {
+      credentials: 'include',
+      headers: workspaceId ? { 'X-Workspace-ID': workspaceId } : undefined,
+    },
+  )
+
+  if (response.status === 401) transport.notifyUnauthorized()
+  if (!response.ok) throw new Error('Could not load document preview.')
+
+  return response.text()
+}
+
+/**
  * Loads binary file content through the workspace-scoped content route.
  * PDF.js needs the original bytes instead of decoded text.
  */

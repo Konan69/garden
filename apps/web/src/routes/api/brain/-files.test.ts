@@ -10,6 +10,7 @@ import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import type { AppRequestContext } from '@/lib/server/context'
 import { postBrainFileUpload, getBrainFiles } from './files'
+import { getBrainFileExtractedText } from './files/$id/text'
 
 const FIXTURES = resolve(process.cwd(), '../../packages/brain/fixtures/docs')
 
@@ -267,11 +268,13 @@ function storeBrainFile({
   itemId = 'item-status',
   r2Key = 'brain-files/ws-status/notes.txt',
   workspaceId = 'ws-status',
+  body,
 }: {
   indexed: boolean
   itemId?: string
   r2Key?: string | undefined
   workspaceId?: string
+  body?: string
 }) {
   const item: BrainItem = {
     id: ItemId.make(itemId),
@@ -284,6 +287,7 @@ function storeBrainFile({
       actor: { _tag: 'Human', userId: 'user-route' },
       at: DateTime.makeUnsafe(new Date()),
     },
+    ...(body === undefined ? {} : { body }),
   }
 
   mockBrainItems.set(item.id, item)
@@ -365,6 +369,36 @@ async function getFileContent({
   })
 
   return { get, response }
+}
+
+async function getFileExtractedText({
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  const { bucket } = makeFiles()
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      FILES: bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  return getBrainFileExtractedText({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
 }
 
 async function getFiles(workspaceId = 'ws-status') {
@@ -631,6 +665,51 @@ describe('GET /api/brain/files/$id/content', () => {
     const { response } = await getFileContent({
       objectBody: null,
     })
+
+    expect(response.status).toBe(404)
+  })
+})
+
+describe('GET /api/brain/files/$id/text', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('returns the extracted document text', async () => {
+    storeBrainFile({
+      indexed: true,
+      body: '# Quarterly report\n\nRevenue increased.',
+    })
+
+    const response = await getFileExtractedText()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/markdown')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(await response.text()).toBe(
+      '# Quarterly report\n\nRevenue increased.',
+    )
+  })
+
+  it('does not expose text from another workspace', async () => {
+    storeBrainFile({
+      indexed: true,
+      workspaceId: 'workspace-one',
+      body: 'Private workspace content',
+    })
+
+    const response = await getFileExtractedText({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns not found when extracted text is unavailable', async () => {
+    storeBrainFile({ indexed: false })
+
+    const response = await getFileExtractedText()
 
     expect(response.status).toBe(404)
   })

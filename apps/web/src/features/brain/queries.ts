@@ -3,6 +3,7 @@ import {
   getBrainFile,
   getBrainFileText,
   getBrainFileBytes,
+  getBrainFileExtractedText,
   listBrainFiles,
   type BrainFileStatus,
 } from './api'
@@ -14,6 +15,8 @@ export const brainFileKeys = {
   list: () => [...brainFileKeys.all, 'list'] as const,
   detail: (id: string) => [...brainFileKeys.all, id] as const,
   content: (id: string) => [...brainFileKeys.detail(id), 'content'] as const,
+  extractedText: (id: string) =>
+    [...brainFileKeys.detail(id), 'extracted-text'] as const,
 }
 
 export function brainFileListOptions() {
@@ -47,6 +50,14 @@ export function brainFileTextOptions(id: string) {
   return queryOptions({
     queryKey: brainFileKeys.content(id),
     queryFn: () => getBrainFileText(id),
+    staleTime: Infinity,
+  })
+}
+
+export function brainFileExtractedTextOptions(id: string) {
+  return queryOptions({
+    queryKey: brainFileKeys.extractedText(id),
+    queryFn: () => getBrainFileExtractedText(id),
     staleTime: Infinity,
   })
 }

@@ -6,6 +6,7 @@ import {
   listBrainFiles,
   uploadBrainFile,
   getBrainFileBytes,
+  getBrainFileExtractedText,
 } from './api'
 
 describe('uploadBrainFile', () => {
@@ -177,6 +178,33 @@ describe('getBrainFileText', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://garden.test/api/brain/files/brain-file-1/content',
+      {
+        credentials: 'include',
+        headers: { 'X-Workspace-ID': 'workspace-1' },
+      },
+    )
+  })
+})
+
+describe('getBrainFileExtractedText', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gets extracted text with the active workspace context', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('# Quarterly report'))
+
+    const transport = configureApi('https://garden.test')
+    transport.setWorkspaceId('workspace-1')
+
+    await expect(getBrainFileExtractedText('brain-file-1')).resolves.toBe(
+      '# Quarterly report',
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files/brain-file-1/text',
       {
         credentials: 'include',
         headers: { 'X-Workspace-ID': 'workspace-1' },

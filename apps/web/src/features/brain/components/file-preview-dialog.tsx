@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { PdfFilePreview } from './pdf-file-preview'
 import { Download, FileText, Loader2, X } from 'lucide-react'
 import { Button, buttonVariants } from '@garden/ui/components/ui/button'
+import { Markdown } from '@garden/ui/markdown'
 import {
   Dialog,
   DialogContent,
@@ -10,14 +11,15 @@ import {
   DialogTitle,
 } from '@garden/ui/components/ui/dialog'
 import type { BrainFileSummary } from '../api'
-import { brainFileTextOptions } from '../queries'
+import { brainFileExtractedTextOptions, brainFileTextOptions } from '../queries'
 
-type PreviewKind = 'pdf' | 'text' | 'unavailable'
+type PreviewKind = 'docx' | 'pdf' | 'text' | 'unavailable'
 
 function previewKind(filename: string): PreviewKind {
   const normalizedName = filename.toLowerCase()
 
   if (normalizedName.endsWith('.pdf')) return 'pdf'
+  if (normalizedName.endsWith('.docx')) return 'docx'
   if (normalizedName.endsWith('.md') || normalizedName.endsWith('.txt'))
     return 'text'
 
@@ -72,10 +74,43 @@ function TextFilePreview({ fileId }: { fileId: string }) {
   )
 }
 
+function DocxFilePreview({ fileId }: { fileId: string }) {
+  const contentQuery = useQuery(brainFileExtractedTextOptions(fileId))
+
+  if (contentQuery.isPending) return <PreviewLoading />
+
+  if (contentQuery.isError) {
+    return (
+      <div className="flex min-h-[65vh] flex-col items-center justify-center gap-3 px-6 text-center">
+        <p role="alert" className="text-sm text-destructive">
+          Could not load preview.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={contentQuery.isFetching}
+          onClick={() => void contentQuery.refetch()}
+        >
+          {contentQuery.isFetching ? 'Trying...' : 'Try again'}
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-[65vh] max-h-[65vh] overflow-auto bg-background px-8 py-6 text-foreground">
+      <Markdown mode="full" className="mx-auto max-w-3xl">
+        {contentQuery.data}
+      </Markdown>
+    </div>
+  )
+}
+
 /**
  * Shows a workspace file through the authenticated Brain content route.
- * PDF, TXT, and MD files render inline. Other supported files keep a clear
- * download path when Garden cannot render them in the browser.
+ * PDF, DOCX, TXT, and MD files render inline. Other supported files keep a
+ * clear download path when Garden cannot render them in the browser.
  */
 export function BrainFilePreviewDialog({
   file,
@@ -120,6 +155,8 @@ export function BrainFilePreviewDialog({
         <div className="min-h-0 overflow-auto bg-muted/20">
           {kind === 'text' ? (
             <TextFilePreview fileId={file.id} />
+          ) : kind === 'docx' ? (
+            <DocxFilePreview fileId={file.id} />
           ) : kind === 'pdf' ? (
             <PdfFilePreview fileId={file.id} />
           ) : (
