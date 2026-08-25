@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 import {
   getBrainFile,
   getBrainFileText,
+  getBrainFileBytes,
   listBrainFiles,
   type BrainFileStatus,
 } from './api'
@@ -46,6 +47,30 @@ export function brainFileTextOptions(id: string) {
   return queryOptions({
     queryKey: brainFileKeys.content(id),
     queryFn: () => getBrainFileText(id),
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Loads the private PDF bytes and creates one cached PDF.js document.
+ * Page previews reuse this document instead of downloading the file again.
+ */
+export function brainFilePdfOptions(id: string) {
+  return queryOptions({
+    queryKey: [...brainFileKeys.content(id), 'pdf'] as const,
+    queryFn: async () => {
+      const [bytes, pdfjs] = await Promise.all([
+        getBrainFileBytes(id),
+        import('pdfjs-dist'),
+      ])
+
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url,
+      ).toString()
+
+      return pdfjs.getDocument({ data: bytes }).promise
+    },
     staleTime: Infinity,
   })
 }

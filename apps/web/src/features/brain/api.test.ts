@@ -5,6 +5,7 @@ import {
   getBrainFileText,
   listBrainFiles,
   uploadBrainFile,
+  getBrainFileBytes,
 } from './api'
 
 describe('uploadBrainFile', () => {
@@ -174,6 +175,34 @@ describe('getBrainFileText', () => {
       'Garden preview notes',
     )
 
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files/brain-file-1/content',
+      {
+        credentials: 'include',
+        headers: { 'X-Workspace-ID': 'workspace-1' },
+      },
+    )
+  })
+})
+
+describe('getBrainFileBytes', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gets binary file content with the active workspace context', async () => {
+    const pdfBytes = new Uint8Array([37, 80, 68, 70])
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(pdfBytes))
+
+    const transport = configureApi('https://garden.test')
+    transport.setWorkspaceId('workspace-1')
+
+    const result = await getBrainFileBytes('brain-file-1')
+
+    expect(Array.from(new Uint8Array(result))).toEqual([37, 80, 68, 70])
     expect(fetchMock).toHaveBeenCalledWith(
       'https://garden.test/api/brain/files/brain-file-1/content',
       {

@@ -69,3 +69,24 @@ export async function getBrainFileText(id: string): Promise<string> {
 
   return response.text()
 }
+
+/**
+ * Loads binary file content through the workspace-scoped content route.
+ * PDF.js needs the original bytes instead of decoded text.
+ */
+export async function getBrainFileBytes(id: string): Promise<ArrayBuffer> {
+  const transport = getApiTransport()
+  const workspaceId = transport.getWorkspaceId()
+  const response = await fetch(
+    `${transport.getBaseUrl()}/api/brain/files/${encodeURIComponent(id)}/content`,
+    {
+      credentials: 'include',
+      headers: workspaceId ? { 'X-Workspace-ID': workspaceId } : undefined,
+    },
+  )
+
+  if (response.status === 401) transport.notifyUnauthorized()
+  if (!response.ok) throw new Error('Could not load file preview.')
+
+  return response.arrayBuffer()
+}

@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { PdfFilePreview } from './pdf-file-preview'
 import { Download, FileText, Loader2, X } from 'lucide-react'
 import { Button, buttonVariants } from '@garden/ui/components/ui/button'
 import {
@@ -72,27 +72,6 @@ function TextFilePreview({ fileId }: { fileId: string }) {
   )
 }
 
-function PdfFilePreview({ name, url }: { name: string; url: string }) {
-  const [loaded, setLoaded] = useState(false)
-
-  return (
-    <div className="relative min-h-[65vh]">
-      {!loaded ? (
-        <div className="absolute inset-0">
-          <PreviewLoading />
-        </div>
-      ) : null}
-      <iframe
-        src={url}
-        title={name}
-        sandbox="allow-same-origin"
-        onLoad={() => setLoaded(true)}
-        className="h-[65vh] w-full border-0 bg-white"
-      />
-    </div>
-  )
-}
-
 /**
  * Shows a workspace file through the authenticated Brain content route.
  * PDF, TXT, and MD files render inline. Other supported files keep a clear
@@ -105,7 +84,6 @@ export function BrainFilePreviewDialog({
   file: BrainFileSummary
   onClose: () => void
 }) {
-  const contentUrl = getContentUrl(file.id)
   const downloadUrl = getContentUrl(file.id, true)
   const kind = previewKind(file.name)
 
@@ -143,7 +121,7 @@ export function BrainFilePreviewDialog({
           {kind === 'text' ? (
             <TextFilePreview fileId={file.id} />
           ) : kind === 'pdf' ? (
-            <PdfFilePreview name={file.name} url={contentUrl} />
+            <PdfFilePreview fileId={file.id} />
           ) : (
             <div className="flex min-h-[24rem] flex-col items-center justify-center gap-3 px-6 text-center">
               <FileText

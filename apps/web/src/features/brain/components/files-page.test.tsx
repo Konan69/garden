@@ -7,7 +7,15 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  beforeAll,
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import type { BrainFileSummary } from '../api'
 import { brainFileKeys } from '../queries'
 import { BrainFilesPage } from './files-page'
@@ -16,12 +24,22 @@ const mockUploadBrainFile = vi.hoisted(() => vi.fn())
 const mockGetBrainFile = vi.hoisted(() => vi.fn())
 const mockGetBrainFileText = vi.hoisted(() => vi.fn())
 const mockListBrainFiles = vi.hoisted(() => vi.fn())
+const mockGetBrainFileBytes = vi.hoisted(() => vi.fn())
+const mockPdfGetDocument = vi.hoisted(() => vi.fn())
 
 vi.mock('../api', () => ({
   getBrainFile: mockGetBrainFile,
   getBrainFileText: mockGetBrainFileText,
   listBrainFiles: mockListBrainFiles,
   uploadBrainFile: mockUploadBrainFile,
+  getBrainFileBytes: mockGetBrainFileBytes,
+}))
+
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: {
+    workerSrc: '',
+  },
+  getDocument: mockPdfGetDocument,
 }))
 
 function renderFilesPage(initialFiles?: BrainFileSummary[]) {
@@ -43,6 +61,16 @@ function renderFilesPage(initialFiles?: BrainFileSummary[]) {
   )
 }
 
+beforeAll(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+    {} as CanvasRenderingContext2D,
+  )
+})
+
+afterAll(() => {
+  vi.restoreAllMocks()
+})
+
 describe('BrainFilesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -52,6 +80,25 @@ describe('BrainFilesPage', () => {
       id: 'brain-file-1',
       name: 'notes.txt',
       status: 'processing',
+    })
+    mockGetBrainFileBytes.mockResolvedValue(
+      new Uint8Array([37, 80, 68, 70]).buffer,
+    )
+    mockPdfGetDocument.mockReturnValue({
+      promise: Promise.resolve({
+        numPages: 2,
+        getPage: vi.fn().mockImplementation(async (pageNumber: number) => ({
+          pageNumber,
+          getViewport: ({ scale }: { scale: number }) => ({
+            width: 600 * scale,
+            height: 800 * scale,
+          }),
+          render: vi.fn(() => ({
+            promise: Promise.resolve(),
+            cancel: vi.fn(),
+          })),
+        })),
+      }),
     })
   })
 
@@ -157,6 +204,43 @@ describe('BrainFilesPage', () => {
       await screen.findByText('Recovered preview notes'),
     ).toBeInTheDocument()
     expect(mockGetBrainFileText).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows PDF page thumbnails and changes the selected page', async () => {
+    const user = userEvent.setup()
+
+    renderFilesPage([
+      {
+        id: 'stored-pdf-1',
+        name: 'quarterly-report.pdf',
+        status: 'ready',
+      },
+    ])
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Preview quarterly-report.pdf',
+      }),
+    )
+
+    const dialog = screen.getByRole('dialog')
+
+    expect(await within(dialog).findByText('Page 1 of 2')).toBeInTheDocument()
+
+    const pageNavigation = within(dialog).getByRole('navigation', {
+      name: 'PDF pages',
+    })
+
+    expect(
+      within(pageNavigation).getByRole('button', { name: 'Show page 1' }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      within(pageNavigation).getByRole('button', { name: 'Show page 2' }),
+    )
+
+    expect(within(dialog).getByText('Page 2 of 2')).toBeInTheDocument()
+    expect(mockGetBrainFileBytes).toHaveBeenCalledWith('stored-pdf-1')
   })
 
   it('uses the designed upload and file tile dimensions', async () => {
