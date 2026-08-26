@@ -383,7 +383,7 @@ describe('BrainFilesPage', () => {
     expect(mockListBrainFiles).toHaveBeenCalledTimes(2)
   })
 
-  it('shows byte-level progress while a file uploads', async () => {
+  it('shows byte-level progress in the upload modal', async () => {
     const user = userEvent.setup()
     const file = new File(['Garden notes'], 'notes.txt', {
       type: 'text/plain',
@@ -403,9 +403,16 @@ describe('BrainFilesPage', () => {
       file,
     )
 
-    expect(await screen.findByText('Uploading 42%')).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog')
+
     expect(
-      screen.getByRole('progressbar', { name: 'Uploading notes.txt' }),
+      within(dialog).getByRole('heading', { name: 'Uploading your file' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('notes.txt')).toBeInTheDocument()
+    expect(within(dialog).getByText('Uploading file')).toBeInTheDocument()
+    expect(within(dialog).getByText('42%')).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('progressbar', { name: 'Uploading notes.txt' }),
     ).toHaveAttribute('aria-valuenow', '42')
   })
 

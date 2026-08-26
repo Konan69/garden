@@ -8,6 +8,7 @@ import {
   brainFileStatusOptions,
 } from '../queries'
 import { BrainFilePreviewDialog } from './file-preview-dialog'
+import { BrainFileUploadDialog } from './file-upload-dialog'
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
@@ -137,43 +138,15 @@ export function BrainFilesPage() {
                 onDrop={handleDrop}
                 className="flex min-h-[7.125rem] w-full flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-6 text-center transition-colors hover:bg-muted/50 disabled:cursor-wait disabled:opacity-70 sm:w-[24.375rem]"
               >
-                {uploadMutation.isPending ? (
-                  <Loader2 className="size-5 animate-spin text-foreground" />
-                ) : (
-                  <FilePlus2 className="size-5 text-foreground" />
-                )}
+                <FilePlus2 className="size-5 text-foreground" />
 
                 <span className="mt-3 text-sm font-medium text-foreground">
-                  {uploadMutation.isPending
-                    ? `Uploading ${uploadProgress}%`
-                    : 'Add your documents or drag and drop them here'}
+                  Add your documents or drag and drop them here
                 </span>
 
-                {uploadMutation.isPending ? (
-                  <>
-                    <span className="mt-2 max-w-full truncate text-xs text-muted-foreground">
-                      {uploadMutation.variables?.name ?? 'Document'}
-                    </span>
-
-                    <span
-                      role="progressbar"
-                      aria-label={`Uploading ${uploadMutation.variables?.name ?? 'document'}`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={uploadProgress}
-                      className="mt-3 h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-border"
-                    >
-                      <span
-                        className="block h-full rounded-full bg-foreground transition-[width]"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </span>
-                  </>
-                ) : (
-                  <span className="mt-2 text-xs text-muted-foreground">
-                    TXT, MD, PDF, DOCX, and XLSX, up to 100 MB
-                  </span>
-                )}
+                <span className="mt-2 text-xs text-muted-foreground">
+                  TXT, MD, PDF, DOCX, and XLSX, up to 100 MB
+                </span>
               </button>
 
               {files.length > 0 ? (
@@ -230,6 +203,12 @@ export function BrainFilesPage() {
               onClose={() => setPreviewFile(null)}
             />
           ) : null}
+
+          <BrainFileUploadDialog
+            fileName={uploadMutation.variables?.name ?? 'Document'}
+            open={uploadMutation.isPending}
+            progress={uploadProgress}
+          />
         </div>
       </div>
     </main>
