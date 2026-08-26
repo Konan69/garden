@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,6 +11,7 @@ import userEvent from '@testing-library/user-event'
 import {
   beforeAll,
   afterAll,
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -21,7 +23,6 @@ import { brainFileKeys } from '../queries'
 import { BrainFilesPage } from './files-page'
 
 const mockUploadBrainFile = vi.hoisted(() => vi.fn())
-const mockGetBrainFile = vi.hoisted(() => vi.fn())
 const mockGetBrainFileText = vi.hoisted(() => vi.fn())
 const mockGetBrainFileExtractedText = vi.hoisted(() => vi.fn())
 const mockListBrainFiles = vi.hoisted(() => vi.fn())
@@ -29,7 +30,6 @@ const mockGetBrainFileBytes = vi.hoisted(() => vi.fn())
 const mockPdfGetDocument = vi.hoisted(() => vi.fn())
 
 vi.mock('../api', () => ({
-  getBrainFile: mockGetBrainFile,
   getBrainFileText: mockGetBrainFileText,
   getBrainFileExtractedText: mockGetBrainFileExtractedText,
   listBrainFiles: mockListBrainFiles,
@@ -73,6 +73,10 @@ afterAll(() => {
   vi.restoreAllMocks()
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('BrainFilesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -81,11 +85,6 @@ describe('BrainFilesPage', () => {
     mockGetBrainFileExtractedText.mockResolvedValue(
       '# Quarterly report\n\nRevenue increased.',
     )
-    mockGetBrainFile.mockResolvedValue({
-      id: 'brain-file-1',
-      name: 'notes.txt',
-      status: 'processing',
-    })
     mockGetBrainFileBytes.mockResolvedValue(
       new Uint8Array([37, 80, 68, 70]).buffer,
     )
@@ -120,6 +119,31 @@ describe('BrainFilesPage', () => {
 
     expect(await screen.findByText('saved-notes.txt')).toBeInTheDocument()
     expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(mockListBrainFiles).toHaveBeenCalledOnce()
+  })
+
+  it('does not poll processing files loaded from storage', async () => {
+    vi.useFakeTimers()
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'stored-file-1',
+        name: 'stuck-report.xlsx',
+        status: 'processing',
+      },
+    ])
+
+    renderFilesPage()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(screen.getByText('stuck-report.xlsx')).toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000)
+    })
+
     expect(mockListBrainFiles).toHaveBeenCalledOnce()
   })
 
@@ -427,8 +451,15 @@ describe('BrainFilesPage', () => {
       name: 'notes.txt',
       status: 'processing',
     })
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'brain-file-1',
+        name: 'notes.txt',
+        status: 'processing',
+      },
+    ])
 
-    renderFilesPage()
+    renderFilesPage([])
 
     await user.upload(
       screen.getByLabelText('Choose a document to upload'),
@@ -509,13 +540,15 @@ describe('BrainFilesPage', () => {
       status: 'processing',
     })
 
-    mockGetBrainFile.mockResolvedValue({
-      id: 'brain-file-1',
-      name: 'notes.txt',
-      status: 'ready',
-    })
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'brain-file-1',
+        name: 'notes.txt',
+        status: 'ready',
+      },
+    ])
 
-    renderFilesPage()
+    renderFilesPage([])
 
     await user.upload(
       screen.getByLabelText('Choose a document to upload'),
@@ -523,7 +556,7 @@ describe('BrainFilesPage', () => {
     )
 
     expect(await screen.findByText('Ready')).toBeInTheDocument()
-    expect(mockGetBrainFile).toHaveBeenCalledWith('brain-file-1')
+    expect(mockListBrainFiles).toHaveBeenCalledOnce()
   })
 
   it('shows a status error and lets the user try again', async () => {
@@ -538,11 +571,11 @@ describe('BrainFilesPage', () => {
       status: 'processing',
     })
 
-    mockGetBrainFile.mockRejectedValueOnce(
+    mockListBrainFiles.mockRejectedValueOnce(
       new Error('Brain file status is unavailable'),
     )
 
-    renderFilesPage()
+    renderFilesPage([])
 
     await user.upload(
       screen.getByLabelText('Choose a document to upload'),
@@ -550,14 +583,16 @@ describe('BrainFilesPage', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not check file status.',
+      'Could not refresh file statuses.',
     )
 
-    mockGetBrainFile.mockResolvedValueOnce({
-      id: 'brain-file-1',
-      name: 'notes.txt',
-      status: 'ready',
-    })
+    mockListBrainFiles.mockResolvedValueOnce([
+      {
+        id: 'brain-file-1',
+        name: 'notes.txt',
+        status: 'ready',
+      },
+    ])
 
     await user.click(screen.getByRole('button', { name: 'Try again' }))
 

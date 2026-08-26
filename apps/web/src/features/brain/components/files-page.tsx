@@ -2,68 +2,46 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2, FileText, Loader2 } from 'lucide-react'
 import { uploadBrainFile, type BrainFileSummary } from '../api'
-import {
-  brainFileKeys,
-  brainFileListOptions,
-  brainFileStatusOptions,
-} from '../queries'
+import { brainFileKeys, brainFileListOptions } from '../queries'
 import { BrainFilePreviewDialog } from './file-preview-dialog'
 import { BrainFileUploadDialog } from './file-upload-dialog'
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
 function BrainFileCard({
+  isPolling,
   onPreview,
   uploadedFile,
 }: {
+  isPolling: boolean
   onPreview: (file: BrainFileSummary) => void
   uploadedFile: BrainFileSummary
 }) {
-  const statusQuery = useQuery(
-    brainFileStatusOptions(uploadedFile.id, uploadedFile.status),
-  )
-  const file = statusQuery.data ?? uploadedFile
-  const canPreview = file.status === 'ready' && !statusQuery.isError
+  const canPreview = uploadedFile.status === 'ready'
 
   return (
     <li className="flex min-h-[7.125rem] w-full flex-col justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 sm:w-[11.625rem]">
       <button
         type="button"
         disabled={!canPreview}
-        onClick={() => onPreview(file)}
-        aria-label={`Preview ${file.name}`}
+        onClick={() => onPreview(uploadedFile)}
+        aria-label={`Preview ${uploadedFile.name}`}
         className="flex w-full min-w-0 cursor-pointer items-start gap-2.5 text-left disabled:cursor-default"
       >
         <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
 
         <span className="min-w-0 truncate text-sm font-medium text-foreground">
-          {file.name}
+          {uploadedFile.name}
         </span>
       </button>
 
-      {statusQuery.isError ? (
-        <div className="mt-3 text-xs">
-          <p role="alert" className="text-destructive">
-            Could not check file status.
-          </p>
+      <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+        {isPolling ? (
+          <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+        ) : null}
 
-          <button
-            type="button"
-            className="mt-1 font-medium text-foreground underline-offset-4 hover:underline"
-            onClick={() => void statusQuery.refetch()}
-          >
-            Try again
-          </button>
-        </div>
-      ) : (
-        <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-          {file.status === 'processing' ? (
-            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-          ) : null}
-
-          {file.status === 'ready' ? 'Ready' : 'Processing'}
-        </p>
-      )}
+        {uploadedFile.status === 'ready' ? 'Ready' : 'Processing'}
+      </p>
     </li>
   )
 }
@@ -72,9 +50,13 @@ export function BrainFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [previewFile, setPreviewFile] = useState<BrainFileSummary | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [sessionUploadIds, setSessionUploadIds] = useState<readonly string[]>(
+    [],
+  )
   const queryClient = useQueryClient()
-  const filesQuery = useQuery(brainFileListOptions())
+  const filesQuery = useQuery(brainFileListOptions(sessionUploadIds))
   const files = filesQuery.data ?? []
+  const sessionUploadIdSet = new Set(sessionUploadIds)
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadBrainFile(file, setUploadProgress),
@@ -87,6 +69,19 @@ export function BrainFilesPage() {
           ...currentFiles.filter((file) => file.id !== uploadedFile.id),
         ],
       )
+
+      if (uploadedFile.status === 'processing') {
+        setSessionUploadIds((currentIds) =>
+          currentIds.includes(uploadedFile.id)
+            ? currentIds
+            : [...currentIds, uploadedFile.id],
+        )
+
+        void queryClient.invalidateQueries({
+          queryKey: brainFileKeys.list(),
+          exact: true,
+        })
+      }
     },
     onSettled: () => setUploadProgress(0),
   })
@@ -159,6 +154,11 @@ export function BrainFilesPage() {
                       key={file.id}
                       uploadedFile={file}
                       onPreview={setPreviewFile}
+                      isPolling={
+                        file.status === 'processing' &&
+                        sessionUploadIdSet.has(file.id) &&
+                        !filesQuery.isError
+                      }
                     />
                   ))}
                 </ul>
@@ -183,7 +183,9 @@ export function BrainFilesPage() {
             {filesQuery.isError ? (
               <div className="mt-4 flex items-center gap-3 text-sm">
                 <p role="alert" className="text-destructive">
-                  Could not load files.
+                  {filesQuery.isRefetchError
+                    ? 'Could not refresh file statuses.'
+                    : 'Could not load files.'}
                 </p>
 
                 <button

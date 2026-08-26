@@ -1,14 +1,12 @@
 import { queryOptions } from '@tanstack/react-query'
 import {
-  getBrainFile,
   getBrainFileText,
   getBrainFileBytes,
   getBrainFileExtractedText,
   listBrainFiles,
-  type BrainFileStatus,
 } from './api'
 
-const FILE_STATUS_POLL_INTERVAL_MS = 2_000
+const FILE_LIST_POLL_INTERVAL_MS = 2_000
 
 export const brainFileKeys = {
   all: ['brain', 'files'] as const,
@@ -19,29 +17,31 @@ export const brainFileKeys = {
     [...brainFileKeys.detail(id), 'extracted-text'] as const,
 }
 
-export function brainFileListOptions() {
+/**
+ * Polls the workspace file list only while an upload started in this page
+ * session remains in processing. Stored processing files do not start polling.
+ * Polling stops after a ready result or request failure.
+ */
+export function brainFileListOptions(sessionUploadIds: readonly string[] = []) {
+  const sessionUploadIdSet = new Set(sessionUploadIds)
+
   return queryOptions({
     queryKey: brainFileKeys.list(),
     queryFn: listBrainFiles,
-    refetchOnWindowFocus: true,
-  })
-}
-
-export function brainFileStatusOptions(
-  id: string,
-  initialStatus: BrainFileStatus,
-) {
-  return queryOptions({
-    queryKey: brainFileKeys.detail(id),
-    queryFn: () => getBrainFile(id),
-    enabled: initialStatus === 'processing',
+    retry: false,
     refetchInterval: (query) => {
-      if (query.state.status === 'error') return false
+      if (query.state.error !== null || sessionUploadIdSet.size === 0) {
+        return false
+      }
 
-      return query.state.data?.status === 'processing'
-        ? FILE_STATUS_POLL_INTERVAL_MS
-        : false
+      const hasProcessingUpload = query.state.data?.some(
+        (file) =>
+          sessionUploadIdSet.has(file.id) && file.status === 'processing',
+      )
+
+      return hasProcessingUpload ? FILE_LIST_POLL_INTERVAL_MS : false
     },
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })
 }
