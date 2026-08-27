@@ -18,6 +18,12 @@ function BrainFileCard({
   uploadedFile: BrainFileSummary
 }) {
   const canPreview = uploadedFile.status === 'ready'
+  const statusLabel =
+    uploadedFile.status === 'ready'
+      ? 'Ready'
+      : uploadedFile.status === 'failed'
+        ? 'Failed'
+        : 'Processing'
 
   return (
     <li className="flex min-h-[7.125rem] w-full flex-col justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 sm:w-[11.625rem]">
@@ -40,7 +46,7 @@ function BrainFileCard({
           <Loader2 className="size-3 animate-spin" aria-hidden="true" />
         ) : null}
 
-        {uploadedFile.status === 'ready' ? 'Ready' : 'Processing'}
+        {statusLabel}
       </p>
     </li>
   )

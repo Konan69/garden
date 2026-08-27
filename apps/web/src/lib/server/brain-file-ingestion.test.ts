@@ -15,6 +15,7 @@ const mockGetAgentByName = vi.hoisted(() => vi.fn())
 const mockGetDb = vi.hoisted(() => vi.fn())
 const mockLogError = vi.hoisted(() => vi.fn())
 const mockStartBrainAudit = vi.hoisted(() => vi.fn())
+const mockUpdateIndexStatus = vi.hoisted(() => vi.fn())
 
 vi.mock('agents', () => ({ getAgentByName: mockGetAgentByName }))
 
@@ -65,6 +66,11 @@ const runDeferredBrainIndexAndAudit = (
     addItem: unused,
     addText: unused,
     updateItemMetadata: unused,
+    updateIndexStatus: (input) =>
+      Effect.sync(() => {
+        mockUpdateIndexStatus(input)
+        return indexedItem
+      }),
     read: unused,
     search: unused,
     linkSections: unused,
@@ -107,6 +113,7 @@ describe('deferred brain indexing audit trigger', () => {
     })
     mockGetDb.mockReset().mockResolvedValue({ id: 'db' })
     mockLogError.mockReset()
+    mockUpdateIndexStatus.mockReset()
     mockStartBrainAudit
       .mockReset()
       .mockResolvedValue({ ok: true, status: 'completed' })
@@ -138,6 +145,17 @@ describe('deferred brain indexing audit trigger', () => {
       'brain file deferred indexing failed',
       expect.objectContaining({ message: 'index failed' }),
     )
+    expect(mockUpdateIndexStatus).toHaveBeenNthCalledWith(1, {
+      itemId: ItemId.make('item-42'),
+      tenantId: WorkspaceId.make('workspace-1'),
+      status: 'processing',
+    })
+    expect(mockUpdateIndexStatus).toHaveBeenNthCalledWith(2, {
+      itemId: ItemId.make('item-42'),
+      tenantId: WorkspaceId.make('workspace-1'),
+      status: 'failed',
+      error: 'index failed',
+    })
   })
 
   it('logs AgentDO failures without rejecting the deferred task', async () => {

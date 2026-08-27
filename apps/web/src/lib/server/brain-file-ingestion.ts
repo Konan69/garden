@@ -149,6 +149,7 @@ export const makeBrainFileIngestionLayer = (
               type: 'file',
               value: `brain:${input.workspaceId}:${normalizeDownloadFilename(input.file.name)}`,
             },
+            indexStatus: 'processing',
             origin: {
               actor: { _tag: 'Human', userId: input.ownerUserId },
               at,
@@ -175,33 +176,67 @@ export const makeBrainFileIngestionLayer = (
         return added
       })
 
+      /** Records a terminal indexing failure without rejecting background work. */
+      const persistIndexFailure = (
+        input: { itemId: string; workspaceId: string },
+        failure: unknown,
+      ): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          brainIngestionLogger.error('brain file deferred indexing failed', {
+            itemId: input.itemId,
+            workspaceId: input.workspaceId,
+            ...errorFields(failure),
+          })
+
+          yield* brain
+            .updateIndexStatus({
+              itemId: ItemId.make(input.itemId),
+              tenantId: WorkspaceId.make(input.workspaceId),
+              status: 'failed',
+              error: messageFromUnknown(failure),
+            })
+            .pipe(
+              Effect.asVoid,
+              Effect.catch((statusFailure) =>
+                Effect.sync(() => {
+                  brainIngestionLogger.error(
+                    'brain file failure status update failed',
+                    {
+                      itemId: input.itemId,
+                      workspaceId: input.workspaceId,
+                      ...errorFields(statusFailure),
+                    },
+                  )
+                }),
+              ),
+            )
+        })
+
       const indexAndAudit = Effect.fn('BrainFileIngestion.indexAndAudit')(
         function* (input: {
           itemId: string
           ownerUserId: string
           workspaceId: string
         }) {
-          const indexed = yield* Effect.match(
+          const indexed = yield* Effect.matchEffect(
             Effect.gen(function* () {
+              yield* brain.updateIndexStatus({
+                itemId: ItemId.make(input.itemId),
+                tenantId: WorkspaceId.make(input.workspaceId),
+                status: 'processing',
+              })
+
               yield* brain.ensureIndexes()
+
               return yield* brain.index(
                 ItemId.make(input.itemId),
                 WorkspaceId.make(input.workspaceId),
               )
             }),
             {
-              onFailure: (failure) => {
-                brainIngestionLogger.error(
-                  'brain file deferred indexing failed',
-                  {
-                    itemId: input.itemId,
-                    workspaceId: input.workspaceId,
-                    ...errorFields(failure),
-                  },
-                )
-                return null
-              },
-              onSuccess: (item) => item,
+              onFailure: (failure) =>
+                persistIndexFailure(input, failure).pipe(Effect.as(null)),
+              onSuccess: (item) => Effect.succeed(item),
             },
           )
           if (indexed === null) return

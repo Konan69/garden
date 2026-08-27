@@ -69,6 +69,12 @@ vi.mock('@garden/brain/services/web', async () => {
                 ? {}
                 : { canonical: input.canonical }),
               indexed: false,
+              ...(input.indexStatus === undefined
+                ? {}
+                : { indexStatus: input.indexStatus }),
+              ...(input.indexError === undefined
+                ? {}
+                : { indexError: input.indexError }),
               origin: input.origin,
               ...(input.body === undefined ? {} : { body: input.body }),
             }
@@ -83,6 +89,8 @@ vi.mock('@garden/brain/services/web', async () => {
             const indexed: BrainItem = {
               ...item,
               indexed: true,
+              indexStatus: 'ready',
+              indexError: '',
               body: `${item.label} indexed content`,
             }
             mockBrainItems.set(item.id, indexed)
@@ -103,6 +111,21 @@ vi.mock('@garden/brain/services/web', async () => {
             ),
           addText: () => Effect.die('unused addText'),
           updateItemMetadata: () => Effect.die('unused updateItemMetadata'),
+          updateIndexStatus: ({ itemId, tenantId, status, error }) => {
+            const item = mockBrainItems.get(itemId)
+            if (item === undefined || item.tenantId !== tenantId) {
+              return Effect.die(`missing test brain item ${itemId}`)
+            }
+
+            const updated: BrainItem = {
+              ...item,
+              indexed: status === 'ready',
+              indexStatus: status,
+              indexError: error?.trim() ?? '',
+            }
+            mockBrainItems.set(item.id, updated)
+            return Effect.succeed(updated)
+          },
           read: (itemId, tenantId) => {
             const item = mockBrainItems.get(itemId)
 
@@ -265,12 +288,14 @@ async function upload({
 
 function storeBrainFile({
   indexed,
+  indexStatus,
   itemId = 'item-status',
   r2Key = 'brain-files/ws-status/notes.txt',
   workspaceId = 'ws-status',
   body,
 }: {
   indexed: boolean
+  indexStatus?: BrainItem['indexStatus']
   itemId?: string
   r2Key?: string | undefined
   workspaceId?: string
@@ -283,6 +308,7 @@ function storeBrainFile({
     label: 'notes.txt',
     ...(r2Key === undefined ? {} : { r2Key }),
     indexed,
+    ...(indexStatus === undefined ? {} : { indexStatus }),
     origin: {
       actor: { _tag: 'Human', userId: 'user-route' },
       at: DateTime.makeUnsafe(new Date()),
@@ -589,8 +615,9 @@ describe('GET /api/brain/files/$id', () => {
   it.each([
     { indexed: false, status: 'processing' },
     { indexed: true, status: 'ready' },
-  ])('reports an indexed file as $status', async ({ indexed, status }) => {
-    const item = storeBrainFile({ indexed })
+    { indexed: false, indexStatus: 'failed' as const, status: 'failed' },
+  ])('reports a file as $status', async ({ indexed, indexStatus, status }) => {
+    const item = storeBrainFile({ indexed, indexStatus })
 
     const response = await getFileStatus()
     expect(response.status).toBe(200)
@@ -730,6 +757,11 @@ describe('GET /api/brain/files', () => {
       indexed: true,
       itemId: 'item-ready',
     })
+    const failed = storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+      itemId: 'item-failed',
+    })
 
     storeBrainFile({
       indexed: true,
@@ -762,9 +794,14 @@ describe('GET /api/brain/files', () => {
           name: ready.label,
           status: 'ready',
         },
+        {
+          id: failed.id,
+          name: failed.label,
+          status: 'failed',
+        },
       ]),
     )
-    expect(body.items).toHaveLength(2)
+    expect(body.items).toHaveLength(3)
 
     for (const item of body.items) {
       expect(Object.keys(item).sort()).toEqual(['id', 'name', 'status'])

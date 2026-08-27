@@ -20,6 +20,7 @@ import {
   BrainEdge,
   BrainItem,
   BrainNeighborhood,
+  BrainIndexStatus,
   ItemId,
   Kind,
   MentionObservation,
@@ -65,6 +66,13 @@ export type BrainShape = {
     summary?: string
     actor: Actor
   }) => Effect.Effect<BrainItem, HelixError | WriteConflict | EmbedError>
+
+  readonly updateIndexStatus: (input: {
+    itemId: ItemId
+    tenantId: WorkspaceId
+    status: BrainIndexStatus
+    error?: string
+  }) => Effect.Effect<BrainItem, HelixError | WriteConflict>
   /**
    * Updates agent-authored structure without changing source content. Static
    * ingestion previously had no way to replace the mechanical `file` kind and
@@ -175,6 +183,8 @@ const ItemRow = Schema.Struct({
   canonical_type: Schema.optional(Schema.String),
   canonical_value: Schema.optional(Schema.String),
   indexed: Schema.optional(Schema.Boolean),
+  index_status: Schema.optional(BrainIndexStatus),
+  index_error: Schema.optional(Schema.String),
   origin: Schema.String,
   body: Schema.optional(Schema.String),
 })
@@ -248,6 +258,11 @@ const rowToItem = (row: Row): BrainItem => {
         ? undefined
         : { type: item.canonical_type, value: item.canonical_value },
     indexed: item.indexed ?? false,
+    indexStatus: item.index_status,
+    indexError:
+      item.index_error === undefined || item.index_error === ''
+        ? undefined
+        : item.index_error,
     origin: decodeOrigin(row.origin),
     body: item.body,
   }
@@ -357,6 +372,12 @@ const propsOf = (item: NewBrainItem): Record<string, PropertyValueInput> => {
     props[SOURCE_KEY_PROP] = item.canonical.value
   }
   if (item.body !== undefined) props[PROPS.body] = item.body
+  if (item.indexStatus !== undefined) {
+    props[PROPS.indexStatus] = item.indexStatus
+  }
+  if (item.indexError !== undefined) {
+    props[PROPS.indexError] = item.indexError
+  }
   return props
 }
 
@@ -387,6 +408,8 @@ const itemProjection = () => [
   PropertyProjection.new('canonical_type'),
   PropertyProjection.new('canonical_value'),
   PropertyProjection.new('indexed'),
+  PropertyProjection.new(PROPS.indexStatus),
+  PropertyProjection.new(PROPS.indexError),
   PropertyProjection.new('origin'),
   PropertyProjection.new('body'),
 ]
@@ -918,6 +941,61 @@ export const makeBrain = Effect.gen(function* () {
     },
   )
 
+  /**
+   * Persists the file indexing lifecycle independently from the indexing work.
+   * Before this operation, an indexing failure left `indexed` false forever,
+   * which made failed files indistinguishable from active work.
+   */
+  const updateIndexStatus = Effect.fn('Brain.updateIndexStatus')(
+    function* (input: {
+      itemId: ItemId
+      tenantId: WorkspaceId
+      status: BrainIndexStatus
+      error?: string
+    }) {
+      const request = writeBatch()
+        .varAs(
+          'updated',
+          setProperties(
+            g()
+              .n([nodeId(input.itemId)])
+              .where(
+                Predicate.eq(PROPS.tenantId, input.tenantId),
+              ) as unknown as Traversal<'nodes', 'write'>,
+            {
+              [PROPS.indexStatus]: input.status,
+              [PROPS.indexError]: input.error?.trim() ?? '',
+              [PROPS.indexed]: input.status === 'ready',
+            },
+          ),
+        )
+        .returning(['updated'])
+        .toQueryRequest({ queryName: QUERY.updateIndexStatus })
+
+      const result = yield* retryWriteConflict(
+        helix.run(request, { awaitDurability: true }),
+      )
+
+      if (firstRow(result, 'updated') === undefined) {
+        return yield* Effect.fail(
+          new HelixError({ message: `item not found: ${input.itemId}` }),
+        )
+      }
+
+      return yield* readItem(helix, input.itemId, input.tenantId).pipe(
+        Effect.flatMap((loaded) =>
+          loaded === null
+            ? Effect.fail(
+                new HelixError({
+                  message: `item not found after status update: ${input.itemId}`,
+                }),
+              )
+            : Effect.succeed(loaded),
+        ),
+      )
+    },
+  )
+
   return Brain.of({
     ensureIndexes: () =>
       Effect.gen(function* () {
@@ -1072,7 +1150,9 @@ export const makeBrain = Effect.gen(function* () {
                 'write'
               >,
               propsWithoutR2Key(props),
-            ).setProperty(PROPS.indexed, false),
+            )
+              .setProperty(PROPS.indexed, false)
+              .setProperty(PROPS.indexError, ''),
           )
           .returning(['created', 'updated'])
           .toQueryRequest({ queryName: QUERY.index })
@@ -1134,6 +1214,7 @@ export const makeBrain = Effect.gen(function* () {
         )
       }),
     updateItemMetadata,
+    updateIndexStatus,
     index: (itemId, tenantId) =>
       Effect.gen(function* () {
         const item = yield* readItem(helix, itemId, tenantId).pipe(
@@ -1228,6 +1309,8 @@ export const makeBrain = Effect.gen(function* () {
           ...item,
           body: doc.body,
           summary: item.summary ?? doc.title,
+          indexStatus: 'ready',
+          indexError: '',
         }
         const fileProps = propsWithEmbedding(indexedItem, fileVector)
         const fileUpdate = setProperties(

@@ -147,6 +147,34 @@ describe('BrainFilesPage', () => {
     expect(mockListBrainFiles).toHaveBeenCalledOnce()
   })
 
+  it('shows a failed file without polling or enabling preview', async () => {
+    vi.useFakeTimers()
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'failed-file-1',
+        name: 'broken-sheet.xlsx',
+        status: 'failed',
+      },
+    ])
+
+    renderFilesPage()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Preview broken-sheet.xlsx' }),
+    ).toBeDisabled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000)
+    })
+
+    expect(mockListBrainFiles).toHaveBeenCalledOnce()
+  })
+
   it('opens and closes a ready file preview', async () => {
     const user = userEvent.setup()
 

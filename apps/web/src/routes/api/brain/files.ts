@@ -85,7 +85,7 @@ export const getBrainFiles = async ({
       items: listResult.success.map((item) => ({
         id: item.id,
         name: item.label,
-        status: item.indexed ? 'ready' : 'processing',
+        status: item.indexStatus ?? (item.indexed ? 'ready' : 'processing'),
       })),
     },
     {
@@ -200,7 +200,7 @@ export const postBrainFileUpload = async ({
       item: {
         id: added.id,
         name: added.label,
-        status: added.indexed ? 'ready' : 'processing',
+        status: added.indexStatus ?? (added.indexed ? 'ready' : 'processing'),
       },
     },
     { status: 201 },

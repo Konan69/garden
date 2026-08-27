@@ -151,6 +151,46 @@ it.effect(
     }),
 )
 
+it.effect('records a terminal file indexing failure', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const failedRow = {
+      ...itemRow(1, 'Quarterly report', 'file'),
+      index_status: 'failed',
+      index_error: 'planner failed',
+    }
+    const brain = yield* testBrain(
+      (request) =>
+        request.toJsonString().includes('brain.update_index_status')
+          ? { updated: [failedRow] }
+          : { item: [failedRow] },
+      calls,
+    )
+
+    const updated = yield* brain.updateIndexStatus({
+      tenantId,
+      itemId: ItemId.make('1'),
+      status: 'failed',
+      error: 'planner failed',
+    })
+
+    expect(updated.indexed).toBe(false)
+    expect(updated.indexStatus).toBe('failed')
+    expect(updated.indexError).toBe('planner failed')
+    expect(calls).toHaveLength(2)
+    expect(calls[0]?.options?.awaitDurability).toBe(true)
+
+    const request = calls[0]?.request.toJsonString() ?? ''
+    expect(request).toContain('"query_name":"brain.update_index_status"')
+    expect(request).toContain('"name":"index_status"')
+    expect(request).toContain('"string":"failed"')
+    expect(request).toContain('"name":"index_error"')
+    expect(request).toContain('"string":"planner failed"')
+    expect(request).toContain('"name":"indexed"')
+    expect(request).toContain('"bool":false')
+  }),
+)
+
 it.effect(
   'links existing items with fixed and agent-invented edge labels',
   () =>

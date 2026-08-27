@@ -1,6 +1,6 @@
 import { getApiTransport } from '@/lib/api/state'
 
-export type BrainFileStatus = 'processing' | 'ready'
+export type BrainFileStatus = 'processing' | 'ready' | 'failed'
 
 export interface BrainFileSummary {
   id: string

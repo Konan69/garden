@@ -68,7 +68,7 @@ export const getBrainFileStatus = async ({
       item: {
         id: item.id,
         name: item.label,
-        status: item.indexed ? 'ready' : 'processing',
+        status: item.indexStatus ?? (item.indexed ? 'ready' : 'processing'),
       },
     },
     {

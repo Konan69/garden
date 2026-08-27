@@ -9,6 +9,13 @@ export type ItemId = typeof ItemId.Type
 export const Kind = Schema.String.pipe(Schema.brand('Kind'))
 export type Kind = typeof Kind.Type
 
+export const BrainIndexStatus = Schema.Literals([
+  'processing',
+  'ready',
+  'failed',
+])
+export type BrainIndexStatus = typeof BrainIndexStatus.Type
+
 export const MentionSpan = Schema.Struct({
   start: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   end: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -49,6 +56,8 @@ export class BrainItem extends Schema.Class<BrainItem>('BrainItem')({
   r2Key: Schema.optional(Schema.String),
   canonical: Schema.optional(Canonical),
   indexed: Schema.Boolean,
+  indexStatus: Schema.optional(BrainIndexStatus),
+  indexError: Schema.optional(Schema.String),
   origin: Origin,
   body: Schema.optional(Schema.String),
 }) {}
@@ -60,6 +69,8 @@ export class NewBrainItem extends Schema.Class<NewBrainItem>('NewBrainItem')({
   summary: Schema.optional(Schema.String),
   r2Key: Schema.optional(Schema.String),
   canonical: Schema.optional(Canonical),
+  indexStatus: Schema.optional(BrainIndexStatus),
+  indexError: Schema.optional(Schema.String),
   origin: Origin,
   body: Schema.optional(Schema.String),
 }) {}
