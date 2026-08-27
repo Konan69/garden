@@ -4,7 +4,11 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Effect, Layer, ManagedRuntime, DateTime } from 'effect'
 import { ItemId, WorkspaceId, type BrainItem, Kind } from '@garden/brain/domain'
-import { getBrainFileStatus } from './files/$id'
+import {
+  deleteBrainFile,
+  getBrainFileStatus,
+  retryBrainFileIndexing,
+} from './files/$id'
 import { getBrainFileContent } from './files/$id/content'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
@@ -126,6 +130,15 @@ vi.mock('@garden/brain/services/web', async () => {
             mockBrainItems.set(item.id, updated)
             return Effect.succeed(updated)
           },
+          deleteFile: (itemId, tenantId) => {
+            const item = mockBrainItems.get(itemId)
+            if (item === undefined || item.tenantId !== tenantId) {
+              return Effect.succeed(null)
+            }
+
+            mockBrainItems.delete(item.id)
+            return Effect.succeed(item)
+          },
           read: (itemId, tenantId) => {
             const item = mockBrainItems.get(itemId)
 
@@ -145,6 +158,13 @@ vi.mock('@garden/brain/services/web', async () => {
           observeMention: () => Effect.die('unused observeMention'),
           linkItems: () => Effect.die('unused linkItems'),
           neighborhood: () => Effect.die('unused neighborhood'),
+          readFileItem: (itemId, tenantId) => {
+            const item = mockBrainItems.get(itemId)
+
+            return Effect.succeed(
+              item !== undefined && item.tenantId === tenantId ? item : null,
+            )
+          },
           readFile: () => Effect.die('unused readFile'),
         }),
       ),
@@ -348,6 +368,76 @@ async function getFileStatus({
     context: {} as AppRequestContext,
     params: { id: itemId },
   })
+}
+
+async function retryFile({
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  const { bucket } = makeFiles()
+  const deferred: Promise<unknown>[] = []
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      FILES: bucket,
+      AgentDO: {},
+      HYPERDRIVE: {},
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+    waitUntil: (promise: Promise<unknown>) => {
+      deferred.push(promise)
+    },
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  const response = await retryBrainFileIndexing({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
+
+  return { deferred, response }
+}
+
+async function deleteFile({
+  files = makeFiles(),
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  files?: ReturnType<typeof makeFiles>
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      FILES: files.bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  const response = await deleteBrainFile({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
+
+  return { files, response }
 }
 
 async function getFileContent({
@@ -649,6 +739,93 @@ describe('GET /api/brain/files/$id', () => {
     })
 
     expect(response.status).toBe(404)
+  })
+})
+
+describe('POST /api/brain/files/$id', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('retries a failed file and schedules indexing', async () => {
+    const item = storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+    })
+
+    const { deferred, response } = await retryFile()
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({
+      item: {
+        id: item.id,
+        name: item.label,
+        status: 'processing',
+      },
+    })
+    expect(deferred).toHaveLength(1)
+
+    await Promise.all(deferred)
+    expect(mockBrainItems.get(item.id)).toEqual(
+      expect.objectContaining({
+        indexed: true,
+        indexStatus: 'ready',
+      }),
+    )
+  })
+
+  it('does not retry a file from another workspace', async () => {
+    storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+      workspaceId: 'workspace-one',
+    })
+
+    const { deferred, response } = await retryFile({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+    expect(deferred).toHaveLength(0)
+  })
+})
+
+describe('DELETE /api/brain/files/$id', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('deletes the workspace file and its R2 object', async () => {
+    const files = makeFiles()
+    const item = storeBrainFile({ indexed: false, indexStatus: 'failed' })
+    files.objects.set(item.r2Key as string, new Uint8Array([1, 2, 3]))
+
+    const { response } = await deleteFile({ files })
+
+    expect(response.status).toBe(204)
+    expect(mockBrainItems.has(item.id)).toBe(false)
+    expect(files.objects.has(item.r2Key as string)).toBe(false)
+  })
+
+  it('does not delete a file from another workspace', async () => {
+    const files = makeFiles()
+    const item = storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+      workspaceId: 'workspace-one',
+    })
+    files.objects.set(item.r2Key as string, new Uint8Array([1, 2, 3]))
+
+    const { response } = await deleteFile({
+      files,
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+    expect(mockBrainItems.has(item.id)).toBe(true)
+    expect(files.objects.has(item.r2Key as string)).toBe(true)
   })
 })
 

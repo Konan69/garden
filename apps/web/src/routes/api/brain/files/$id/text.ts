@@ -49,7 +49,7 @@ export const getBrainFileExtractedText = async ({
   const readResult = await Effect.runPromise(
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
-        brain.read(
+        brain.readFileItem(
           ItemId.make(params.id),
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
@@ -66,7 +66,7 @@ export const getBrainFileExtractedText = async ({
 
   const item = readResult.success
 
-  if (item === null || item.kind !== 'file') {
+  if (item === null) {
     return notFound('Brain file not found')
   }
 

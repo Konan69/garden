@@ -191,6 +191,54 @@ it.effect('records a terminal file indexing failure', () =>
   }),
 )
 
+it.effect('deletes a workspace file and its derived sections', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const fileRow = {
+      ...itemRow(1, 'Quarterly report', 'file'),
+      r2_key: 'brain/workspaces/ws-graph/quarterly-report.pdf',
+    }
+    const brain = yield* testBrain(
+      (request) =>
+        request.toJsonString().includes('brain.delete_file')
+          ? { sections: [], file: [fileRow] }
+          : { file: [fileRow] },
+      calls,
+    )
+
+    const deleted = yield* brain.deleteFile(ItemId.make('1'), tenantId)
+
+    expect(deleted?.id).toBe(ItemId.make('1'))
+    expect(deleted?.r2Key).toBe(
+      'brain/workspaces/ws-graph/quarterly-report.pdf',
+    )
+    expect(calls).toHaveLength(3)
+
+    const readRequest = calls[0]?.request.toJsonString() ?? ''
+    expect(readRequest).toContain('"query_name":"brain.read"')
+    expect(readRequest).toContain('"property":"$label"')
+    expect(readRequest).toContain('"string":"file"')
+    expect(readRequest).toContain('"property":"workspace_id"')
+    expect(readRequest).toContain('"string":"ws-graph"')
+
+    const sectionsRequest = calls[1]?.request.toJsonString() ?? ''
+    expect(calls[1]?.options?.awaitDurability).toBe(true)
+    expect(sectionsRequest).toContain('"query_name":"brain.delete_file"')
+    expect(sectionsRequest).toContain('"label":"HAS_SECTION"')
+    expect(sectionsRequest).toContain('"drop"')
+    expect(sectionsRequest).toContain('"property":"workspace_id"')
+    expect(sectionsRequest).toContain('"string":"ws-graph"')
+
+    const fileRequest = calls[2]?.request.toJsonString() ?? ''
+    expect(calls[2]?.options?.awaitDurability).toBe(true)
+    expect(fileRequest).toContain('"query_name":"brain.delete_file"')
+    expect(fileRequest).toContain('"property":"$label"')
+    expect(fileRequest).toContain('"string":"file"')
+    expect(fileRequest).toContain('"drop"')
+    expect(fileRequest).not.toContain('"label":"HAS_SECTION"')
+  }),
+)
+
 it.effect(
   'links existing items with fixed and agent-invented edge labels',
   () =>

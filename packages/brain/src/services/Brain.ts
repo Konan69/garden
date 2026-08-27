@@ -73,6 +73,10 @@ export type BrainShape = {
     status: BrainIndexStatus
     error?: string
   }) => Effect.Effect<BrainItem, HelixError | WriteConflict>
+  readonly deleteFile: (
+    itemId: ItemId,
+    tenantId: WorkspaceId,
+  ) => Effect.Effect<BrainItem | null, HelixError | WriteConflict>
   /**
    * Updates agent-authored structure without changing source content. Static
    * ingestion previously had no way to replace the mechanical `file` kind and
@@ -93,6 +97,13 @@ export type BrainShape = {
     HelixError | WriteConflict | EmbedError | ExtractError
   >
   readonly read: (
+    id: ItemId,
+    tenantId: WorkspaceId,
+  ) => Effect.Effect<BrainItem | null, HelixError | WriteConflict>
+  /**
+   * Reads only a file storage node inside the specified workspace.
+   */
+  readonly readFileItem: (
     id: ItemId,
     tenantId: WorkspaceId,
   ) => Effect.Effect<BrainItem | null, HelixError | WriteConflict>
@@ -576,6 +587,35 @@ const readItem = (
   })
 
 /**
+ * Reads one workspace file by its Helix storage label. File API routes use
+ * this boundary so an item ID cannot expose a note or section as a file.
+ */
+const readFileItem = (
+  helix: HelixClientShape,
+  itemId: ItemId,
+  tenantId: WorkspaceId,
+): Effect.Effect<BrainItem | null, HelixError | WriteConflict> =>
+  Effect.gen(function* () {
+    const request = readBatch()
+      .varAs(
+        'file',
+        g()
+          .n([nodeId(itemId)])
+          .where(Predicate.eq('$label', LABELS.File))
+          .where(Predicate.eq(PROPS.tenantId, tenantId))
+          .valueMap(itemProps()),
+      )
+      .returning(['file'])
+      .toQueryRequest({ queryName: QUERY.read })
+
+    const result = yield* helix.run(request)
+    const row = firstRow(result, 'file')
+    if (row === undefined) return null
+
+    return yield* decodeRow(row)
+  })
+
+/**
  * Selects sections linked to one item that are absent from its latest chunk
  * source keys. Helix's traversal `drop` removes stale nodes and their edges;
  * when chunks have no canonical keys, all old linked sections are replaced.
@@ -996,6 +1036,53 @@ export const makeBrain = Effect.gen(function* () {
     },
   )
 
+  /**
+   * Removes one workspace-scoped file and its derived section nodes. The
+   * returned item keeps the R2 key available for object cleanup by the caller.
+   * Separate Helix writes keep each delete query simple. A retry can safely
+   * finish the operation if section deletion succeeds but file deletion fails.
+   */
+  const deleteFile = Effect.fn('Brain.deleteFile')(function* (
+    itemId: ItemId,
+    tenantId: WorkspaceId,
+  ) {
+    const item = yield* readFileItem(helix, itemId, tenantId)
+    if (item === null) return null
+
+    const sectionsRequest = writeBatch()
+      .varAs(
+        'sections',
+        g()
+          .n([nodeId(item.id)])
+          .where(Predicate.eq('$label', LABELS.File))
+          .where(Predicate.eq(PROPS.tenantId, tenantId))
+          .out(EDGES.hasSection)
+          .drop(),
+      )
+      .returning(['sections'])
+      .toQueryRequest({ queryName: QUERY.deleteFile })
+
+    yield* retryWriteConflict(
+      helix.run(sectionsRequest, { awaitDurability: true }),
+    )
+
+    const fileRequest = writeBatch()
+      .varAs(
+        'file',
+        g()
+          .n([nodeId(item.id)])
+          .where(Predicate.eq('$label', LABELS.File))
+          .where(Predicate.eq(PROPS.tenantId, tenantId))
+          .drop(),
+      )
+      .returning(['file'])
+      .toQueryRequest({ queryName: QUERY.deleteFile })
+
+    yield* retryWriteConflict(helix.run(fileRequest, { awaitDurability: true }))
+
+    return item
+  })
+
   return Brain.of({
     ensureIndexes: () =>
       Effect.gen(function* () {
@@ -1215,6 +1302,7 @@ export const makeBrain = Effect.gen(function* () {
       }),
     updateItemMetadata,
     updateIndexStatus,
+    deleteFile,
     index: (itemId, tenantId) =>
       Effect.gen(function* () {
         const item = yield* readItem(helix, itemId, tenantId).pipe(
@@ -1464,6 +1552,7 @@ export const makeBrain = Effect.gen(function* () {
         if (row.workspace_id !== tenantId) return null
         return yield* decodeRow(row)
       }),
+    readFileItem: (id, tenantId) => readFileItem(helix, id, tenantId),
 
     listFiles: ({ tenantId, limit }) =>
       Effect.gen(function* () {
@@ -1678,7 +1767,7 @@ export const makeBrain = Effect.gen(function* () {
     neighborhood,
     readFile: (itemId, tenantId, range) =>
       Effect.gen(function* () {
-        const item = yield* readItem(helix, itemId, tenantId).pipe(
+        const item = yield* readFileItem(helix, itemId, tenantId).pipe(
           Effect.flatMap((loaded) =>
             loaded === null
               ? Effect.fail(

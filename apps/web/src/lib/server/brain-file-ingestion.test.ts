@@ -71,6 +71,7 @@ const runDeferredBrainIndexAndAudit = (
         mockUpdateIndexStatus(input)
         return indexedItem
       }),
+    deleteFile: unused,
     read: unused,
     search: unused,
     linkSections: unused,
@@ -78,6 +79,7 @@ const runDeferredBrainIndexAndAudit = (
     observeMention: unused,
     linkItems: unused,
     neighborhood: unused,
+    readFileItem: unused,
     readFile: unused,
   } satisfies BrainShape)
   const live = makeBrainFileIngestionLayer({

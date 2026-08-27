@@ -1,8 +1,9 @@
-import { Effect, Result as EffectResult } from 'effect'
+import { Effect, Layer, Result as EffectResult } from 'effect'
 import { createFileRoute } from '@tanstack/react-router'
 import { ItemId, WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
+import { createGardenLogger, errorFields } from '@garden/observability/logger'
 import {
   requireAppRequestContext,
   type AppRequestContext,
@@ -13,7 +14,30 @@ import {
   requireWorkspaceContext,
 } from '@/lib/server/control-plane'
 import type { AppEnv } from '@/lib/server/env'
+import { makeBrainAuditClientLayer } from '@/lib/server/brain-audit-runtime'
+import {
+  BrainFileIngestion,
+  makeBrainFileIngestionLayer,
+} from '@/lib/server/brain-file-ingestion'
 
+const brainFileLogger = createGardenLogger({
+  service: 'garden-staging',
+  component: 'brain-files-api',
+})
+
+/**
+ * Maps stored indexing fields to the public file status. Older Brain items can
+ * lack `indexStatus`, so `indexed` remains the compatibility source.
+ */
+const fileStatusOf = (item: {
+  indexed: boolean
+  indexStatus?: 'processing' | 'ready' | 'failed'
+}) => item.indexStatus ?? (item.indexed ? 'ready' : 'processing')
+
+/**
+ * Returns the public status of one file in the active workspace. `readFileItem`
+ * prevents another Brain node type from passing through this file endpoint.
+ */
 export const getBrainFileStatus = async ({
   context,
   params,
@@ -45,7 +69,7 @@ export const getBrainFileStatus = async ({
   const readResult = await Effect.runPromise(
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
-        brain.read(
+        brain.readFileItem(
           ItemId.make(params.id),
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
@@ -68,7 +92,7 @@ export const getBrainFileStatus = async ({
       item: {
         id: item.id,
         name: item.label,
-        status: item.indexStatus ?? (item.indexed ? 'ready' : 'processing'),
+        status: fileStatusOf(item),
       },
     },
     {
@@ -79,10 +103,184 @@ export const getBrainFileStatus = async ({
   )
 }
 
+/**
+ * Marks one non-ready file as processing, then schedules indexing through the
+ * Worker request context. This follows the existing upload route's `waitUntil`
+ * pattern in `apps/web/src/routes/api/brain/files.ts`.
+ */
+export const retryBrainFileIndexing = async ({
+  context,
+  params,
+}: {
+  context: AppRequestContext
+  params: { id: string }
+}): Promise<Response> => {
+  const appContext = requireAppRequestContext(context)
+  const workspaceContext = await requireWorkspaceContext(appContext)
+  if (workspaceContext instanceof Response) return workspaceContext
+
+  const env = appContext.env as AppEnv & {
+    HELIX_URL?: string
+    HELIX_API_KEY?: string
+  }
+  const helixUrl = env.HELIX_URL
+  if (helixUrl === undefined) {
+    return badRequest('Brain is not configured (missing HELIX_URL)')
+  }
+
+  const brainLive = makeWebBrainLive({
+    baseUrl: helixUrl,
+    apiKey: env.HELIX_API_KEY,
+    ai: env.AI,
+    files: env.FILES,
+  })
+  const prepareResult = await Effect.runPromise(
+    Effect.result(
+      Effect.flatMap(Brain, (brain) =>
+        Effect.gen(function* () {
+          const item = yield* brain.readFileItem(
+            ItemId.make(params.id),
+            WorkspaceId.make(workspaceContext.workspaceId),
+          )
+          if (item === null || fileStatusOf(item) === 'ready') return item
+
+          return yield* brain.updateIndexStatus({
+            itemId: item.id,
+            tenantId: item.tenantId,
+            status: 'processing',
+          })
+        }),
+      ).pipe(Effect.provide(brainLive)),
+    ),
+  )
+
+  if (EffectResult.isFailure(prepareResult)) {
+    return Response.json(
+      { error: 'Brain file retry is unavailable' },
+      { status: 503 },
+    )
+  }
+
+  const item = prepareResult.success
+  if (item === null) return notFound('Brain file not found')
+
+  const status = fileStatusOf(item)
+  if (status !== 'ready') {
+    const ingestionLive = makeBrainFileIngestionLayer(env).pipe(
+      Layer.provide(
+        Layer.merge(brainLive, makeBrainAuditClientLayer(env.AgentDO)),
+      ),
+    )
+    const waitUntil = appContext.waitUntil ?? (() => {})
+    waitUntil(
+      Effect.runPromise(
+        Effect.flatMap(BrainFileIngestion, (ingestion) =>
+          ingestion.indexAndAudit({
+            itemId: item.id,
+            ownerUserId: workspaceContext.session.user.id,
+            workspaceId: workspaceContext.workspaceId,
+          }),
+        ).pipe(Effect.provide(ingestionLive)),
+      ),
+    )
+  }
+
+  return Response.json(
+    {
+      item: {
+        id: item.id,
+        name: item.label,
+        status,
+      },
+    },
+    { status: status === 'ready' ? 200 : 202 },
+  )
+}
+
+/**
+ * Deletes the workspace-scoped Helix file first, then removes its private R2
+ * object. The deleted item supplies the server-only R2 key. An R2 cleanup
+ * failure is logged because the inaccessible orphan does not restore the file.
+ *
+ * Cloudflare R2 reference:
+ * https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+ */
+export const deleteBrainFile = async ({
+  context,
+  params,
+}: {
+  context: AppRequestContext
+  params: { id: string }
+}): Promise<Response> => {
+  const appContext = requireAppRequestContext(context)
+  const workspaceContext = await requireWorkspaceContext(appContext)
+  if (workspaceContext instanceof Response) return workspaceContext
+
+  const env = appContext.env as AppEnv & {
+    HELIX_URL?: string
+    HELIX_API_KEY?: string
+  }
+  const helixUrl = env.HELIX_URL
+  if (helixUrl === undefined) {
+    return badRequest('Brain is not configured (missing HELIX_URL)')
+  }
+
+  const brainLive = makeWebBrainLive({
+    baseUrl: helixUrl,
+    apiKey: env.HELIX_API_KEY,
+    ai: env.AI,
+    files: env.FILES,
+  })
+  const deleteResult = await Effect.runPromise(
+    Effect.result(
+      Effect.flatMap(Brain, (brain) =>
+        brain.deleteFile(
+          ItemId.make(params.id),
+          WorkspaceId.make(workspaceContext.workspaceId),
+        ),
+      ).pipe(Effect.provide(brainLive)),
+    ),
+  )
+
+  if (EffectResult.isFailure(deleteResult)) {
+    return Response.json(
+      { error: 'Brain file deletion is unavailable' },
+      { status: 503 },
+    )
+  }
+
+  const deleted = deleteResult.success
+  if (deleted === null) return notFound('Brain file not found')
+
+  const r2Key = deleted.r2Key
+
+  if (r2Key !== undefined) {
+    const cleanupResult = await Effect.runPromise(
+      Effect.result(
+        Effect.tryPromise({
+          try: () => env.FILES.delete(r2Key),
+          catch: (cause) => cause,
+        }),
+      ),
+    )
+    if (EffectResult.isFailure(cleanupResult)) {
+      brainFileLogger.error('brain file R2 cleanup failed', {
+        itemId: deleted.id,
+        workspaceId: workspaceContext.workspaceId,
+        ...errorFields(cleanupResult.failure),
+      })
+    }
+  }
+
+  return new Response(null, { status: 204 })
+}
+
 export const Route = createFileRoute('/api/brain/files/$id')({
   server: {
     handlers: {
+      DELETE: deleteBrainFile,
       GET: getBrainFileStatus,
+      POST: retryBrainFileIndexing,
     },
   },
 })

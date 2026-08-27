@@ -56,7 +56,7 @@ export const getBrainFileContent = async ({
   const readResult = await Effect.runPromise(
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
-        brain.read(
+        brain.readFileItem(
           ItemId.make(params.id),
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
