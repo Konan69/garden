@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FilePlus2, FileText, Loader2 } from 'lucide-react'
+import { FilePlus2, Loader2 } from 'lucide-react'
+import { BrainFileTypeIcon } from './file-type-icon'
 import { uploadBrainFile, retryBrainFile, type BrainFileSummary } from '../api'
 import { brainFileKeys, brainFileListOptions } from '../queries'
 import { BrainFilePreviewDialog } from './file-preview-dialog'
@@ -41,8 +42,10 @@ function BrainFileCard({
         aria-label={`Preview ${uploadedFile.name}`}
         className="flex w-full min-w-0 cursor-pointer items-start gap-2.5 text-left disabled:cursor-default"
       >
-        <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-
+        <BrainFileTypeIcon
+          fileName={uploadedFile.name}
+          className="mt-0.5 size-6"
+        />
         <span className="min-w-0 truncate text-sm font-medium text-foreground">
           {uploadedFile.name}
         </span>
@@ -76,6 +79,7 @@ function BrainFileCard({
 export function BrainFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [previewFile, setPreviewFile] = useState<BrainFileSummary | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [sessionUploadIds, setSessionUploadIds] = useState<readonly string[]>(
     [],
@@ -110,7 +114,10 @@ export function BrainFilesPage() {
         })
       }
     },
-    onSettled: () => setUploadProgress(0),
+    onSettled: () => {
+      setUploadProgress(0)
+      setSelectedFile(null)
+    },
   })
 
   const retryMutation = useMutation({
@@ -139,20 +146,31 @@ export function BrainFilesPage() {
     },
   })
 
-  const startUpload = (file: File | undefined) => {
+  /**
+   * Opens the review modal without starting the network upload.
+   */
+  const reviewFile = (file: File | undefined) => {
     if (file === undefined || uploadMutation.isPending) return
-    uploadMutation.mutate(file)
+    setSelectedFile(file)
+  }
+
+  /**
+   * Starts the upload after the user confirms the selected file.
+   */
+  const confirmUpload = () => {
+    if (selectedFile === null || uploadMutation.isPending) return
+    uploadMutation.mutate(selectedFile)
   }
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
-    startUpload(file)
+    reviewFile(file)
   }
 
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    startUpload(event.dataTransfer.files[0])
+    reviewFile(event.dataTransfer.files[0])
   }
 
   const uploadError =
@@ -278,9 +296,11 @@ export function BrainFilesPage() {
           ) : null}
 
           <BrainFileUploadDialog
-            fileName={uploadMutation.variables?.name ?? 'Document'}
-            open={uploadMutation.isPending}
+            file={selectedFile}
+            uploading={uploadMutation.isPending}
             progress={uploadProgress}
+            onConfirm={confirmUpload}
+            onClose={() => setSelectedFile(null)}
           />
         </div>
       </div>

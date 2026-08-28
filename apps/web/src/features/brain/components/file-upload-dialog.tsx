@@ -1,3 +1,4 @@
+import { Button } from '@garden/ui/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -5,71 +6,107 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@garden/ui/components/ui/dialog'
-import { FileText, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { BrainFileTypeIcon } from './file-type-icon'
 
 type BrainFileUploadDialogProps = {
-  fileName: string
-  open: boolean
+  file: File | null
+  onClose: () => void
+  onConfirm: () => void
   progress: number
+  uploading: boolean
 }
 
 /**
- * Keeps upload progress visible in the modal defined by the Files & Folders
- * design. The upload surface stays stable while the browser sends the file.
+ * Lets the user review a selected file before upload. After confirmation, the
+ * same modal shows byte-level upload progress.
  */
 export function BrainFileUploadDialog({
-  fileName,
-  open,
+  file,
+  onClose,
+  onConfirm,
   progress,
+  uploading,
 }: BrainFileUploadDialogProps) {
+  if (file === null) return null
+
   return (
-    <Dialog open={open}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !uploading) onClose()
+      }}
+    >
       <DialogContent
-        showCloseButton={false}
+        showCloseButton={!uploading}
         className="gap-5 p-5 sm:max-w-[24rem]"
       >
         <DialogHeader>
-          <DialogTitle>Uploading your file</DialogTitle>
+          <DialogTitle>
+            {uploading ? 'Uploading your file' : 'Add to knowledge base'}
+          </DialogTitle>
+
           <DialogDescription className="sr-only">
-            Garden is uploading {fileName}.
+            {uploading
+              ? `Garden is uploading ${file.name}.`
+              : `Review ${file.name} before adding it to the knowledge base.`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/20 p-4">
-          <FileText
-            className="mt-0.5 size-8 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <BrainFileTypeIcon fileName={file.name} />
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-foreground">
-              {fileName}
-            </p>
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-              Uploading file
+              {file.name}
             </p>
 
-            <div className="mt-4 flex items-center gap-3">
-              <span
-                role="progressbar"
-                aria-label={`Uploading ${fileName}`}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progress}
-                className="h-1.5 flex-1 overflow-hidden rounded-full bg-border"
-              >
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              {uploading ? (
+                <>
+                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                  Uploading file
+                </>
+              ) : (
+                'Ready to upload'
+              )}
+            </p>
+
+            {uploading ? (
+              <div className="mt-4 flex items-center gap-3">
                 <span
-                  className="block h-full rounded-full bg-foreground transition-[width]"
-                  style={{ width: `${progress}%` }}
-                />
-              </span>
-              <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">
-                {progress}%
-              </span>
-            </div>
+                  role="progressbar"
+                  aria-label={`Uploading ${file.name}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress}
+                  className="h-1.5 flex-1 overflow-hidden rounded-full bg-border"
+                >
+                  <span
+                    className="block h-full rounded-full bg-foreground transition-[width]"
+                    style={{ width: `${progress}%` }}
+                  />
+                </span>
+
+                <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">
+                  {progress}%
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
+
+        {!uploading ? (
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+
+            <Button type="button" onClick={onConfirm}>
+              Add to knowledge base
+            </Button>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

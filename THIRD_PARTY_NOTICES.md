@@ -39,6 +39,16 @@ retains upstream `setDocumentLocked`/`applyOperationLocked` mutation behavior
 while composing it into Garden's existing per-thread Durable Object instead of
 introducing the gadget's second Durable Object.
 
+## Material Icon Theme file icons
+
+Garden includes PDF, Word, spreadsheet, document, and Markdown SVG
+icons under `apps/web/public/file-types/`.
+
+Upstream: https://github.com/material-extensions/vscode-material-icon-theme
+
+Material Icon Theme is licensed under the MIT License. The complete upstream
+license is included at `third_party/material-icon-theme/LICENSE`.
+
 ## Cloudflare Agents
 
 Garden carries `patches/agents@0.17.3.patch`, which modifies Cloudflare Agents

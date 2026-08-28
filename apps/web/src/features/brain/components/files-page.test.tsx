@@ -65,6 +65,19 @@ function renderFilesPage(initialFiles?: BrainFileSummary[]) {
   )
 }
 
+/**
+ * Confirms the file shown in the upload review modal.
+ */
+async function confirmSelectedFile(user: ReturnType<typeof userEvent.setup>) {
+  const dialog = await screen.findByRole('dialog')
+
+  await user.click(
+    within(dialog).getByRole('button', {
+      name: 'Add to knowledge base',
+    }),
+  )
+}
+
 beforeAll(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
     {} as CanvasRenderingContext2D,
@@ -122,6 +135,52 @@ describe('BrainFilesPage', () => {
     expect(await screen.findByText('saved-notes.txt')).toBeInTheDocument()
     expect(screen.getByText('Ready')).toBeInTheDocument()
     expect(mockListBrainFiles).toHaveBeenCalledOnce()
+  })
+
+  it('shows file-type icons for stored files', async () => {
+    renderFilesPage([
+      {
+        id: 'pdf-file',
+        name: 'report.pdf',
+        status: 'ready',
+      },
+      {
+        id: 'docx-file',
+        name: 'brief.docx',
+        status: 'ready',
+      },
+      {
+        id: 'xlsx-file',
+        name: 'budget.xlsx',
+        status: 'ready',
+      },
+      {
+        id: 'txt-file',
+        name: 'notes.txt',
+        status: 'ready',
+      },
+      {
+        id: 'md-file',
+        name: 'readme.md',
+        status: 'ready',
+      },
+    ])
+
+    const fileList = await screen.findByRole('list')
+
+    expect(
+      within(fileList).getByRole('img', { name: 'PDF file' }),
+    ).toBeVisible()
+    expect(
+      within(fileList).getByRole('img', { name: 'DOC file' }),
+    ).toBeVisible()
+    expect(
+      within(fileList).getByRole('img', { name: 'XLS file' }),
+    ).toBeVisible()
+    expect(
+      within(fileList).getByRole('img', { name: 'TXT file' }),
+    ).toBeVisible()
+    expect(within(fileList).getByRole('img', { name: 'MD file' })).toBeVisible()
   })
 
   it('does not poll processing files loaded from storage', async () => {
@@ -499,6 +558,48 @@ describe('BrainFilesPage', () => {
     expect(mockListBrainFiles).toHaveBeenCalledTimes(2)
   })
 
+  it('reviews a selected file before adding it to the knowledge base', async () => {
+    const user = userEvent.setup()
+    const file = new File(['Quarterly report'], 'report.pdf', {
+      type: 'application/pdf',
+    })
+
+    mockUploadBrainFile.mockImplementationOnce(() => new Promise(() => {}))
+
+    renderFilesPage()
+
+    await user.upload(
+      screen.getByLabelText('Choose a document to upload'),
+      file,
+    )
+
+    const dialog = await screen.findByRole('dialog')
+
+    expect(
+      within(dialog).getByRole('heading', {
+        name: 'Add to knowledge base',
+      }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('report.pdf')).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('img', { name: 'PDF file' }),
+    ).toBeInTheDocument()
+    expect(mockUploadBrainFile).not.toHaveBeenCalled()
+
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: 'Add to knowledge base',
+      }),
+    )
+
+    expect(mockUploadBrainFile).toHaveBeenCalledWith(file, expect.any(Function))
+    expect(
+      await within(dialog).findByRole('heading', {
+        name: 'Uploading your file',
+      }),
+    ).toBeInTheDocument()
+  })
+
   it('shows byte-level progress in the upload modal', async () => {
     const user = userEvent.setup()
     const file = new File(['Garden notes'], 'notes.txt', {
@@ -518,6 +619,8 @@ describe('BrainFilesPage', () => {
       screen.getByLabelText('Choose a document to upload'),
       file,
     )
+
+    await confirmSelectedFile(user)
 
     const dialog = await screen.findByRole('dialog')
 
@@ -558,6 +661,8 @@ describe('BrainFilesPage', () => {
       file,
     )
 
+    await confirmSelectedFile(user)
+
     await waitFor(() => {
       expect(mockUploadBrainFile.mock.calls[0]?.[0]).toBe(file)
     })
@@ -567,6 +672,7 @@ describe('BrainFilesPage', () => {
   })
 
   it('uploads a dropped file', async () => {
+    const user = userEvent.setup()
     const file = new File(['Quarterly report'], 'report.pdf', {
       type: 'application/pdf',
     })
@@ -589,6 +695,8 @@ describe('BrainFilesPage', () => {
         },
       },
     )
+
+    await confirmSelectedFile(user)
 
     await waitFor(() => {
       expect(mockUploadBrainFile.mock.calls[0]?.[0]).toBe(file)
@@ -614,6 +722,8 @@ describe('BrainFilesPage', () => {
       screen.getByLabelText('Choose a document to upload'),
       file,
     )
+
+    await confirmSelectedFile(user)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'The Brain service is unavailable.',
@@ -647,6 +757,8 @@ describe('BrainFilesPage', () => {
       file,
     )
 
+    await confirmSelectedFile(user)
+
     expect(await screen.findByText('Ready')).toBeInTheDocument()
     expect(mockListBrainFiles).toHaveBeenCalledOnce()
   })
@@ -673,6 +785,8 @@ describe('BrainFilesPage', () => {
       screen.getByLabelText('Choose a document to upload'),
       file,
     )
+
+    await confirmSelectedFile(user)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not refresh file statuses.',
