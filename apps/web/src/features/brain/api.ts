@@ -48,6 +48,16 @@ export async function getBrainFile(id: string): Promise<BrainFileSummary> {
   return response.item
 }
 
+/** Restarts indexing for one file in the active workspace. */
+export async function retryBrainFile(id: string): Promise<BrainFileSummary> {
+  const response = await getApiTransport().request<BrainFileResponse>(
+    `/api/brain/files/${encodeURIComponent(id)}`,
+    { method: 'POST' },
+  )
+
+  return response.item
+}
+
 /**
  * Loads plain-text file content through the workspace-scoped content route.
  * The normal API transport expects JSON, so this narrow client keeps the same

@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2, FileText, Loader2 } from 'lucide-react'
-import { uploadBrainFile, type BrainFileSummary } from '../api'
+import { uploadBrainFile, retryBrainFile, type BrainFileSummary } from '../api'
 import { brainFileKeys, brainFileListOptions } from '../queries'
 import { BrainFilePreviewDialog } from './file-preview-dialog'
 import { BrainFileUploadDialog } from './file-upload-dialog'
@@ -10,14 +10,21 @@ const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
 function BrainFileCard({
   isPolling,
+  isRetrying,
   onPreview,
+  onRetry,
   uploadedFile,
 }: {
   isPolling: boolean
+  isRetrying: boolean
   onPreview: (file: BrainFileSummary) => void
+  onRetry: (file: BrainFileSummary) => void
   uploadedFile: BrainFileSummary
 }) {
   const canPreview = uploadedFile.status === 'ready'
+  const canRetry =
+    uploadedFile.status === 'failed' ||
+    (uploadedFile.status === 'processing' && !isPolling)
   const statusLabel =
     uploadedFile.status === 'ready'
       ? 'Ready'
@@ -41,13 +48,27 @@ function BrainFileCard({
         </span>
       </button>
 
-      <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-        {isPolling ? (
-          <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-        ) : null}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {isPolling || isRetrying ? (
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+          ) : null}
 
-        {statusLabel}
-      </p>
+          {isRetrying ? 'Retrying' : statusLabel}
+        </p>
+
+        {canRetry ? (
+          <button
+            type="button"
+            aria-label={`Retry ${uploadedFile.name}`}
+            disabled={isRetrying}
+            onClick={() => onRetry(uploadedFile)}
+            className="text-xs font-medium text-foreground underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-70"
+          >
+            Retry
+          </button>
+        ) : null}
+      </div>
     </li>
   )
 }
@@ -92,6 +113,32 @@ export function BrainFilesPage() {
     onSettled: () => setUploadProgress(0),
   })
 
+  const retryMutation = useMutation({
+    mutationFn: (id: string) => retryBrainFile(id),
+    onSuccess: (retriedFile) => {
+      queryClient.setQueryData<BrainFileSummary[]>(
+        brainFileKeys.list(),
+        (currentFiles = []) =>
+          currentFiles.map((file) =>
+            file.id === retriedFile.id ? retriedFile : file,
+          ),
+      )
+
+      if (retriedFile.status === 'processing') {
+        setSessionUploadIds((currentIds) =>
+          currentIds.includes(retriedFile.id)
+            ? currentIds
+            : [...currentIds, retriedFile.id],
+        )
+
+        void queryClient.invalidateQueries({
+          queryKey: brainFileKeys.list(),
+          exact: true,
+        })
+      }
+    },
+  })
+
   const startUpload = (file: File | undefined) => {
     if (file === undefined || uploadMutation.isPending) return
     uploadMutation.mutate(file)
@@ -114,7 +161,12 @@ export function BrainFilesPage() {
       : uploadMutation.error
         ? 'The file could not be uploaded.'
         : null
-
+  const retryError =
+    retryMutation.error instanceof Error
+      ? retryMutation.error.message
+      : retryMutation.error
+        ? 'The file could not be retried.'
+        : null
   return (
     <main className="h-full overflow-y-auto bg-background">
       <div className="w-full px-6 py-10 sm:px-10 lg:px-[4.875rem]">
@@ -165,6 +217,13 @@ export function BrainFilesPage() {
                         sessionUploadIdSet.has(file.id) &&
                         !filesQuery.isError
                       }
+                      isRetrying={
+                        retryMutation.isPending &&
+                        retryMutation.variables === file.id
+                      }
+                      onRetry={(fileToRetry) =>
+                        retryMutation.mutate(fileToRetry.id)
+                      }
                     />
                   ))}
                 </ul>
@@ -183,6 +242,12 @@ export function BrainFilesPage() {
             {uploadError ? (
               <p role="alert" className="mt-3 text-sm text-destructive">
                 {uploadError}
+              </p>
+            ) : null}
+
+            {retryError ? (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {retryError}
               </p>
             ) : null}
 

@@ -27,12 +27,14 @@ const mockGetBrainFileText = vi.hoisted(() => vi.fn())
 const mockGetBrainFileExtractedText = vi.hoisted(() => vi.fn())
 const mockListBrainFiles = vi.hoisted(() => vi.fn())
 const mockGetBrainFileBytes = vi.hoisted(() => vi.fn())
+const mockRetryBrainFile = vi.hoisted(() => vi.fn())
 const mockPdfGetDocument = vi.hoisted(() => vi.fn())
 
 vi.mock('../api', () => ({
   getBrainFileText: mockGetBrainFileText,
   getBrainFileExtractedText: mockGetBrainFileExtractedText,
   listBrainFiles: mockListBrainFiles,
+  retryBrainFile: mockRetryBrainFile,
   uploadBrainFile: mockUploadBrainFile,
   getBrainFileBytes: mockGetBrainFileBytes,
 }))
@@ -139,6 +141,9 @@ describe('BrainFilesPage', () => {
     })
 
     expect(screen.getByText('stuck-report.xlsx')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Retry stuck-report.xlsx' }),
+    ).toBeEnabled()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(6_000)
@@ -173,6 +178,65 @@ describe('BrainFilesPage', () => {
     })
 
     expect(mockListBrainFiles).toHaveBeenCalledOnce()
+  })
+
+  it('retries a failed file and refreshes its status', async () => {
+    const user = userEvent.setup()
+
+    mockRetryBrainFile.mockResolvedValue({
+      id: 'failed-file-1',
+      name: 'broken-sheet.xlsx',
+      status: 'processing',
+    })
+    mockListBrainFiles.mockResolvedValue([
+      {
+        id: 'failed-file-1',
+        name: 'broken-sheet.xlsx',
+        status: 'ready',
+      },
+    ])
+
+    renderFilesPage([
+      {
+        id: 'failed-file-1',
+        name: 'broken-sheet.xlsx',
+        status: 'failed',
+      },
+    ])
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Retry broken-sheet.xlsx',
+      }),
+    )
+
+    expect(mockRetryBrainFile).toHaveBeenCalledWith('failed-file-1')
+    expect(await screen.findByText('Ready')).toBeInTheDocument()
+  })
+
+  it('shows a retry error and keeps the recovery action available', async () => {
+    const user = userEvent.setup()
+
+    mockRetryBrainFile.mockRejectedValue(new Error('Retry unavailable'))
+
+    renderFilesPage([
+      {
+        id: 'failed-file-1',
+        name: 'broken-sheet.xlsx',
+        status: 'failed',
+      },
+    ])
+
+    const retryButton = await screen.findByRole('button', {
+      name: 'Retry broken-sheet.xlsx',
+    })
+
+    await user.click(retryButton)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Retry unavailable',
+    )
+    expect(retryButton).toBeEnabled()
   })
 
   it('opens and closes a ready file preview', async () => {

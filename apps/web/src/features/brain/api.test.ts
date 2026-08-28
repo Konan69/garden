@@ -7,6 +7,7 @@ import {
   uploadBrainFile,
   getBrainFileBytes,
   getBrainFileExtractedText,
+  retryBrainFile,
 } from './api'
 
 describe('uploadBrainFile', () => {
@@ -118,6 +119,36 @@ describe('getBrainFile', () => {
       'https://garden.test/api/brain/files/brain-file-1',
       expect.objectContaining({
         credentials: 'include',
+      }),
+    )
+  })
+})
+
+describe('retryBrainFile', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('restarts indexing for the selected file', async () => {
+    const retriedItem = {
+      id: 'brain-file-1',
+      name: 'notes.txt',
+      status: 'processing' as const,
+    }
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(Response.json({ item: retriedItem }, { status: 202 }))
+
+    configureApi('https://garden.test')
+
+    await expect(retryBrainFile('brain-file-1')).resolves.toEqual(retriedItem)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files/brain-file-1',
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
       }),
     )
   })
