@@ -1,4 +1,4 @@
-import { Effect, Layer, Result as EffectResult } from 'effect'
+import { Cause, Effect, Layer, Result as EffectResult } from 'effect'
 import { createFileRoute } from '@tanstack/react-router'
 import { ItemId, WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
@@ -24,6 +24,23 @@ const brainFileLogger = createGardenLogger({
   service: 'garden-staging',
   component: 'brain-files-api',
 })
+
+const logRetryPreparationFailure = (
+  operation: 'readFileItem' | 'updateIndexStatus',
+  input: {
+    itemId: string
+    workspaceId: string
+  },
+  cause: Cause.Cause<unknown>,
+) =>
+  Effect.sync(() => {
+    brainFileLogger.error('brain file retry preparation failed', {
+      operation,
+      itemId: input.itemId,
+      workspaceId: input.workspaceId,
+      ...errorFields(Cause.squash(cause)),
+    })
+  })
 
 /**
  * Maps stored indexing fields to the public file status. Older Brain items can
@@ -119,6 +136,11 @@ export const retryBrainFileIndexing = async ({
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
 
+  const retryContext = {
+    itemId: params.id,
+    workspaceId: workspaceContext.workspaceId,
+  }
+
   const env = appContext.env as AppEnv & {
     HELIX_URL?: string
     HELIX_API_KEY?: string
@@ -134,21 +156,39 @@ export const retryBrainFileIndexing = async ({
     ai: env.AI,
     files: env.FILES,
   })
+
   const prepareResult = await Effect.runPromise(
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
         Effect.gen(function* () {
-          const item = yield* brain.readFileItem(
-            ItemId.make(params.id),
-            WorkspaceId.make(workspaceContext.workspaceId),
-          )
+          const item = yield* brain
+            .readFileItem(
+              ItemId.make(params.id),
+              WorkspaceId.make(workspaceContext.workspaceId),
+            )
+            .pipe(
+              Effect.tapCause((cause) =>
+                logRetryPreparationFailure('readFileItem', retryContext, cause),
+              ),
+            )
+
           if (item === null || fileStatusOf(item) === 'ready') return item
 
-          return yield* brain.updateIndexStatus({
-            itemId: item.id,
-            tenantId: item.tenantId,
-            status: 'processing',
-          })
+          return yield* brain
+            .updateIndexStatus({
+              itemId: item.id,
+              tenantId: item.tenantId,
+              status: 'processing',
+            })
+            .pipe(
+              Effect.tapCause((cause) =>
+                logRetryPreparationFailure(
+                  'updateIndexStatus',
+                  retryContext,
+                  cause,
+                ),
+              ),
+            )
         }),
       ).pipe(Effect.provide(brainLive)),
     ),
