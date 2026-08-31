@@ -80,7 +80,7 @@ export const getBrainFileStatus = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
 
   const readResult = await Effect.runPromise(
@@ -154,7 +154,7 @@ export const retryBrainFileIndexing = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
 
   const prepareResult = await Effect.runPromise(
@@ -269,7 +269,7 @@ export const deleteBrainFile = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
   const deleteResult = await Effect.runPromise(
     Effect.result(
@@ -298,7 +298,7 @@ export const deleteBrainFile = async ({
     const cleanupResult = await Effect.runPromise(
       Effect.result(
         Effect.tryPromise({
-          try: () => env.FILES.delete(r2Key),
+          try: () => env.BRAIN_FILES.delete(r2Key),
           catch: (cause) => cause,
         }),
       ),

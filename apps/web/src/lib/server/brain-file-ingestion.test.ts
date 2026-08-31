@@ -52,7 +52,7 @@ const indexedItem = {
 
 const agentDo = {} as AppEnv['AgentDO']
 const hyperdrive = {} as AppEnv['HYPERDRIVE']
-const files = {} as AppEnv['FILES']
+const brainFiles = {} as AppEnv['BRAIN_FILES']
 
 const unused = () => Effect.die('unused Brain operation')
 
@@ -83,7 +83,7 @@ const runDeferredBrainIndexAndAudit = (
     readFile: unused,
   } satisfies BrainShape)
   const live = makeBrainFileIngestionLayer({
-    FILES: files,
+    BRAIN_FILES: brainFiles,
     HYPERDRIVE: hyperdrive,
   }).pipe(
     Layer.provide(

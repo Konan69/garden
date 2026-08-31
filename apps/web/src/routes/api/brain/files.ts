@@ -60,7 +60,7 @@ export const getBrainFiles = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
 
   const listResult = await Effect.runPromise(
@@ -155,7 +155,7 @@ export const postBrainFileUpload = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
   const ingestionLive = makeBrainFileIngestionLayer(env).pipe(
     Layer.provide(

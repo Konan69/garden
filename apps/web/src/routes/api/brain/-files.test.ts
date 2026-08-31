@@ -280,7 +280,7 @@ async function upload({
   const deferred: Promise<unknown>[] = []
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: bucket,
+      BRAIN_FILES: bucket,
       AgentDO: {},
       HYPERDRIVE: {},
       AI: stubAi,
@@ -351,7 +351,7 @@ async function getFileStatus({
 
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: bucket,
+      BRAIN_FILES: bucket,
       AI: stubAi,
       HELIX_URL: 'http://localhost:6968',
       HELIX_API_KEY: '',
@@ -382,7 +382,7 @@ async function retryFile({
 
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: bucket,
+      BRAIN_FILES: bucket,
       AgentDO: {},
       HYPERDRIVE: {},
       AI: stubAi,
@@ -419,7 +419,7 @@ async function deleteFile({
 } = {}) {
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: files.bucket,
+      BRAIN_FILES: files.bucket,
       AI: stubAi,
       HELIX_URL: 'http://localhost:6968',
       HELIX_API_KEY: '',
@@ -463,7 +463,7 @@ async function getFileContent({
 
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: { get },
+      BRAIN_FILES: { get },
       AI: stubAi,
       HELIX_URL: 'http://localhost:6968',
       HELIX_API_KEY: '',
@@ -498,7 +498,7 @@ async function getFileExtractedText({
 
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: bucket,
+      BRAIN_FILES: bucket,
       AI: stubAi,
       HELIX_URL: 'http://localhost:6968',
       HELIX_API_KEY: '',
@@ -522,7 +522,7 @@ async function getFiles(workspaceId = 'ws-status') {
 
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: bucket,
+      BRAIN_FILES: bucket,
       AI: stubAi,
       HELIX_URL: 'http://localhost:6968',
       HELIX_API_KEY: '',
@@ -607,7 +607,7 @@ describe('POST /api/brain/files', () => {
     const { objects, bucket } = makeFiles()
     mockRequireAppRequestContext.mockReturnValueOnce(
       fakeContext({
-        FILES: bucket,
+        BRAIN_FILES: bucket,
         AgentDO: {},
         HYPERDRIVE: {},
         AI: stubAi,

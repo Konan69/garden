@@ -43,7 +43,7 @@ export const getBrainFileExtractedText = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
 
   const readResult = await Effect.runPromise(

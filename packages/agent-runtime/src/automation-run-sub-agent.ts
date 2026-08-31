@@ -90,6 +90,7 @@ type AgentRuntimeEnv = Cloudflare.Env & {
   ENVIRONMENT?: string
   VITE_PUBLIC_POSTHOG_HOST?: string
   VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?: string
+  BRAIN_FILES: R2Bucket
   FILES: R2Bucket
   LOADER: WorkerLoader
   BROWSER: Fetcher
@@ -424,7 +425,7 @@ export class AutomationRunSubAgent extends Think<AgentRuntimeEnv> {
             : { HELIX_API_KEY: this.env.HELIX_API_KEY }),
         },
         ai: this.env.AI,
-        files: this.env.FILES,
+        files: this.env.BRAIN_FILES,
         getContext: () => {
           const ctx = this.currentLogContext
           if (ctx === null) return null

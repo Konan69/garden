@@ -54,7 +54,7 @@ const messageFromUnknown = (cause: unknown): string =>
  * orchestration remains one Effect service and upload failures retain cleanup.
  */
 export const makeBrainFileIngestionLayer = (
-  env: Pick<AppEnv, 'FILES' | 'HYPERDRIVE'>,
+  env: Pick<AppEnv, 'BRAIN_FILES' | 'HYPERDRIVE'>,
 ): Layer.Layer<BrainFileIngestion, never, Brain | BrainAuditClient> =>
   Layer.effect(
     BrainFileIngestion,
@@ -80,7 +80,7 @@ export const makeBrainFileIngestionLayer = (
         reason: 'duplicate' | 'upload_failed'
       }) {
         yield* Effect.tryPromise({
-          try: () => env.FILES.delete(input.r2Key),
+          try: () => env.BRAIN_FILES.delete(input.r2Key),
           catch: (cause) =>
             ingestionFailure('delete staged brain upload', cause),
         }).pipe(
@@ -127,7 +127,7 @@ export const makeBrainFileIngestionLayer = (
         const at = yield* DateTime.now
         yield* Effect.tryPromise({
           try: () =>
-            env.FILES.put(input.r2Key, input.file.stream(), {
+            env.BRAIN_FILES.put(input.r2Key, input.file.stream(), {
               httpMetadata: {
                 contentType: input.file.type || 'application/octet-stream',
                 contentDisposition: buildContentDisposition(

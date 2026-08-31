@@ -50,7 +50,7 @@ export const getBrainFileContent = async ({
     baseUrl: helixUrl,
     apiKey: env.HELIX_API_KEY,
     ai: env.AI,
-    files: env.FILES,
+    files: env.BRAIN_FILES,
   })
 
   const readResult = await Effect.runPromise(
@@ -78,7 +78,9 @@ export const getBrainFileContent = async ({
   if (r2Key === undefined) return notFound('Brain file content not found')
 
   const objectResult = await Effect.runPromise(
-    Effect.result(Effect.tryPromise(() => env.FILES.get(r2Key))),
+    Effect.result(
+      Effect.tryPromise<R2ObjectBody | null>(() => env.BRAIN_FILES.get(r2Key)),
+    ),
   )
 
   if (EffectResult.isFailure(objectResult)) {

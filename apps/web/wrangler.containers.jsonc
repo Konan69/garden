@@ -93,6 +93,10 @@
   ],
   "r2_buckets": [
     {
+      "binding": "BRAIN_FILES",
+      "bucket_name": "org-brain-local",
+    },
+    {
       "binding": "FILES",
       "bucket_name": "garden-files-local",
     },

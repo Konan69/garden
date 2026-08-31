@@ -21,6 +21,7 @@ type AgentRuntimeEnv = Cloudflare.Env & {
   AI: Ai
   AI_GATEWAY_ID?: string
   ENVIRONMENT?: string
+  BRAIN_FILES: R2Bucket
   FILES: R2Bucket
   HELIX_URL?: string
   HELIX_API_KEY?: string
@@ -94,7 +95,7 @@ export class BrainAuditSubAgent extends Think<AgentRuntimeEnv> {
           : { HELIX_API_KEY: this.env.HELIX_API_KEY }),
       },
       ai: this.env.AI,
-      files: this.env.FILES,
+      files: this.env.BRAIN_FILES,
       getContext: () => this.getConfig<BrainAuditConfig>(),
     })
   }
