@@ -199,7 +199,7 @@ export class ApiTransport {
         }
 
         const payload = Result.try({
-          try: () => JSON.parse(request.responseText) as T,
+          try: () => JSON.parse(request.responseText) as unknown,
           catch: (cause) =>
             new ApiError({
               message: errorMessage(cause, 'Invalid JSON response'),
@@ -213,7 +213,7 @@ export class ApiTransport {
           return
         }
 
-        resolve(payload.value)
+        resolve(payload.value as T)
       }
 
       request.send(body)
