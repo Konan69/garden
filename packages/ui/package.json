@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
+    "tokens:build": "node scripts/build-tokens.mjs",
     "ui:add": "pnpm dlx shadcn@latest add --path components/ui",
     "ui:diff": "pnpm dlx shadcn@latest diff",
     "typecheck": "tsc --noEmit",
