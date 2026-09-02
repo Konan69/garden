@@ -45,6 +45,10 @@ Both modes share the same setup through step 2, and both use the dockerized
 local Postgres as the recommended database — a fresh, private instance that
 migrations can own.
 
+New contributors can follow the complete
+[developer onboarding guide](docs/development/onboarding.md) for setup, system
+boundaries, an issue-run trace, and change verification.
+
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 22.12 or newer
