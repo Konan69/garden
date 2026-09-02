@@ -24,7 +24,7 @@ import { EyeIcon, EyeOffIcon, Loader2Icon } from 'lucide-react'
  *
  * The deep-arched top ("greenhouse window") frames the brand mark and
  * greeting; the form lives in the rectangular zone below. The greeting is set
- * in the system's prose face (DM Sans) for warmth, controls stay in Geist.
+ * in the system's prose face (var(--font-prose)), controls stay in the UI sans.
  * Behavior contract (labels, button names, show/hide password, forgot link)
  * is unchanged and covered by existing tests.
  */

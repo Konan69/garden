@@ -492,8 +492,8 @@
   gap: 0.5rem;
 }
 
-/* Chat assistant prose — DM Sans at 14.5px / 1.55 line-height. Code and
- * pre stay in Geist Mono. */
+/* Chat assistant prose — var(--font-prose) at 14.5px / 1.55 line-height.
+ * Code and pre stay in var(--font-mono). */
 .is-assistant {
   font-family: var(--font-prose);
   font-size: 14.5px;

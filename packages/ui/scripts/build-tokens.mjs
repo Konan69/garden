@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Generates `packages/ui/styles/tokens.css` from `packages/ui/tokens/tokens.json`
- * (Tokens Studio for Figma export — the new design-system source of truth).
+ * (Tokens Studio export — the new design-system source of truth).
  *
  * Why this exists: the design overhaul replaces the hand-authored parchment-era
- * tokens.css with a generated file so Figma re-exports stay a one-command re-sync
+ * tokens.css with a generated file so token re-exports stay a one-command re-sync
  * instead of a manual merge. Regenerate with: pnpm --filter @garden/ui tokens:build
  *
  * Output architecture (mirrors the previous hand-authored file's proven pattern):
@@ -189,7 +189,7 @@ const darkFlat = flatten(Dark)
 const byType = (entries, type) => entries.filter((e) => e.token.$type === type)
 const varLine = (name, value) => `  --${name}: ${value};`
 
-// Fail loudly if a Figma re-export introduces a $type this generator doesn't
+// Fail loudly if a token re-export introduces a $type this generator doesn't
 // handle — partitioning below would otherwise silently drop those tokens.
 const KNOWN_GLOBAL_TYPES = new Set([
   'color',
