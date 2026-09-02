@@ -370,6 +370,7 @@
   --sidebar-accent-foreground: var(--text-neutral-default);
   --sidebar-border: var(--border-default);
   --sidebar-ring: var(--border-brand-default);
+  --radius: 12px;
   --brand: var(--background-brand-default);
   --brand-foreground: var(--text-brand-on-brand);
   --success: var(--text-success-secondary);
@@ -931,10 +932,10 @@
   --color-lavender-mist: var(--lavender-mist);
   --color-peach: var(--peach);
   --color-dusk-rose: var(--dusk-rose);
-  --shadow-hairline: var(--shadow-1);
-  --shadow-hairline-soft: var(--shadow-2);
-  --shadow-float-1: var(--shadow-3);
-  --shadow-float-2: var(--shadow-5);
+  --shadow-hairline: var(--shadow-hairline);
+  --shadow-hairline-soft: var(--shadow-hairline-soft);
+  --shadow-float-1: var(--shadow-float-1);
+  --shadow-float-2: var(--shadow-float-2);
 
   /* Type scale — token values override Tailwind defaults (line-heights paired per composite roles) */
   --text-base: var(--font-size-base);

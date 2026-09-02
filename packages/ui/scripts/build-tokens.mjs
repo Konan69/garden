@@ -189,6 +189,33 @@ const darkFlat = flatten(Dark)
 const byType = (entries, type) => entries.filter((e) => e.token.$type === type)
 const varLine = (name, value) => `  --${name}: ${value};`
 
+// Fail loudly if a Figma re-export introduces a $type this generator doesn't
+// handle — partitioning below would otherwise silently drop those tokens.
+const KNOWN_GLOBAL_TYPES = new Set([
+  'color',
+  'fontSizes',
+  'letterSpacing',
+  'borderRadius',
+  'shadow',
+  'spacing',
+  'sizing',
+  'borderWidth',
+  'typography',
+  // Deliberately not emitted: weights match Tailwind defaults, family atoms are
+  // wired via @utility composites, case/decoration atoms only appear in composites.
+  'fontWeights',
+  'fontFamilies',
+  'textCase',
+  'textDecoration',
+])
+for (const e of globalFlat) {
+  if (!KNOWN_GLOBAL_TYPES.has(e.token.$type)) {
+    throw new Error(
+      `Unhandled Global $type '${e.token.$type}' at ${e.path} — extend build-tokens.mjs`,
+    )
+  }
+}
+
 // --- Partition Global primitives -------------------------------------------------
 const primitiveColors = byType(globalFlat, 'color')
 const fontSizes = byType(globalFlat, 'fontSizes')
@@ -237,6 +264,9 @@ const SHADCN_COMPAT = {
   'sidebar-border': 'var(--border-default)',
   'sidebar-ring': 'var(--border-brand-default)',
   // Garden extras consumed by product surfaces (bg-brand, text-warning, …).
+  // --radius base var: still referenced bare by input-group/sonner/content-editor
+  // (no fallback); 12px matches both the old 0.75rem and the new radius-lg.
+  radius: '12px',
   brand: 'var(--background-brand-default)',
   'brand-foreground': 'var(--text-brand-on-brand)',
   success: 'var(--text-success-secondary)',
@@ -267,6 +297,11 @@ const LEGACY_COMPAT = {
   'lavender-mist': 'var(--badge-blue-background)',
   peach: 'var(--badge-yellow-background)',
   'dusk-rose': 'var(--badge-gray-background)',
+}
+
+// Legacy shadow names — kept separate from LEGACY_COMPAT colors so emission
+// doesn't sniff value strings to decide whether to add a --color-* binding.
+const LEGACY_SHADOW_COMPAT = {
   'shadow-hairline': 'var(--shadow-1)',
   'shadow-hairline-soft': 'var(--shadow-2)',
   'shadow-float-1': 'var(--shadow-3)',
@@ -350,6 +385,8 @@ out.push(
 )
 for (const [name, value] of Object.entries(LEGACY_COMPAT))
   out.push(varLine(name, value))
+for (const [name, value] of Object.entries(LEGACY_SHADOW_COMPAT))
+  out.push(varLine(name, value))
 out.push(`}`)
 
 // 2. :root.dark — dark semantics only
@@ -372,14 +409,16 @@ out.push(`\n  /* Semantic colors */`)
 for (const e of lightFlat)
   out.push(varLine(`color-${e.path}`, `var(--${e.path})`))
 out.push(`\n  /* Compat — shadcn + garden extras */`)
-for (const name of Object.keys(SHADCN_COMPAT))
+for (const name of Object.keys(SHADCN_COMPAT)) {
+  // `radius` is a bare :root var (shadcn base), not a color utility namespace.
+  if (name === 'radius') continue
   out.push(varLine(`color-${name}`, `var(--${name})`))
-out.push(`\n  /* Compat — legacy (transition only) */`)
-for (const [name, value] of Object.entries(LEGACY_COMPAT)) {
-  if (value.includes('--shadow'))
-    out.push(varLine(name, value)) // shadows, not colors
-  else out.push(varLine(`color-${name}`, `var(--${name})`))
 }
+out.push(`\n  /* Compat — legacy (transition only) */`)
+for (const name of Object.keys(LEGACY_COMPAT))
+  out.push(varLine(`color-${name}`, `var(--${name})`))
+for (const name of Object.keys(LEGACY_SHADOW_COMPAT))
+  out.push(varLine(name, `var(--${name})`))
 out.push(
   `\n  /* Type scale — token values override Tailwind defaults (line-heights paired per composite roles) */`,
 )
