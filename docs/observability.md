@@ -2,6 +2,13 @@
 
 Garden uses Cloudflare Workers Logs as the primary debugging surface. Use the Garden app Worker logs first (`garden-staging`); connector APIs and Executor MCP Durable Objects run in that deployment. The Tail Worker (`garden-staging-tail`) is only an optional summary stream.
 
+## Production build trigger
+
+Cloudflare Workers Builds deploys `garden-staging` from the `main` branch of
+`Flow-Research/garden`. Cloudflare stores the GitHub repository ID, not only its
+owner and name. After a repository transfer or replacement, reconnect the
+Workers Builds trigger even when the GitHub URL remains unchanged.
+
 ## Primary dashboard filters
 
 Open Workers & Pages → Observability, then query the producer Worker. Useful filters:

@@ -138,6 +138,19 @@ describe('LoginPage', () => {
     )
   })
 
+  it('keeps privacy and terms available from the public auth surface', () => {
+    renderLoginPage()
+
+    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    )
+    expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute(
+      'href',
+      '/terms',
+    )
+  })
+
   it('shows the auth error when Better Auth rejects the request', async () => {
     const user = userEvent.setup()
     const { onSuccess } = renderLoginPage()

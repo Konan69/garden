@@ -5,7 +5,6 @@ import { ArrowLeftIcon, ArrowRightIcon, Loader2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 import { BrandIcon } from '@garden/ui/components/common/brand-icon'
 import { Button, buttonVariants } from '@garden/ui/components/ui/button'
-import { Card, CardContent } from '@garden/ui/components/ui/card'
 import {
   Field,
   FieldDescription,
@@ -14,6 +13,7 @@ import {
   FieldLabel,
 } from '@garden/ui/components/ui/field'
 import { Input } from '@garden/ui/components/ui/input'
+import { LoginFoliage } from '@/components/login-foliage'
 import { authClient } from '@/lib/auth/client'
 
 class PasswordRecoveryError extends TaggedError('PasswordRecoveryError')<{
@@ -112,11 +112,12 @@ export function RequestPasswordResetPage({
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
-          <FieldGroup>
+          <FieldGroup className="gap-5">
             <Field>
               <FieldLabel htmlFor="recovery-email">Email</FieldLabel>
               <Input
                 id="recovery-email"
+                className="h-10 bg-bone/60"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -128,7 +129,7 @@ export function RequestPasswordResetPage({
             </Field>
             <FieldError>{error}</FieldError>
             <Field>
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="h-10 w-full" disabled={loading}>
                 {loading ? (
                   <Loader2Icon className="size-4 animate-spin" />
                 ) : (
@@ -215,11 +216,12 @@ export function ResetPasswordPage({
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
-          <FieldGroup>
+          <FieldGroup className="gap-5">
             <Field>
               <FieldLabel htmlFor="new-password">New password</FieldLabel>
               <Input
                 id="new-password"
+                className="h-10 bg-bone/60"
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -235,6 +237,7 @@ export function ResetPasswordPage({
               </FieldLabel>
               <Input
                 id="confirm-password"
+                className="h-10 bg-bone/60"
                 type="password"
                 value={confirmation}
                 onChange={(event) => setConfirmation(event.target.value)}
@@ -245,7 +248,7 @@ export function ResetPasswordPage({
             </Field>
             <FieldError>{error}</FieldError>
             <Field>
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="h-10 w-full" disabled={loading}>
                 {loading ? (
                   <Loader2Icon className="size-4 animate-spin" />
                 ) : (
@@ -261,6 +264,12 @@ export function ResetPasswordPage({
   )
 }
 
+/**
+ * Shared shell for both recovery forms, matching the redesigned login (Aug
+ * 2026): arched vellum panel on the parchment ground, leaf mark, prose-face
+ * greeting, foliage bed behind. Unlike the login, the subtitle stays — the
+ * recovery flows genuinely need their one line of instruction.
+ */
 function RecoveryShell({
   title,
   subtitle,
@@ -271,23 +280,20 @@ function RecoveryShell({
   children: React.ReactNode
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <Card className="w-full max-w-md border-border/70 bg-background shadow-sm">
-        <CardContent className="space-y-6 p-6 md:p-8">
-          <div className="space-y-3">
-            <div className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 bg-muted/30 text-foreground">
-              <BrandIcon className="size-4" noSpin />
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-              <p className="text-sm leading-6 text-muted-foreground">
-                {subtitle}
-              </p>
-            </div>
-          </div>
-          {children}
-        </CardContent>
-      </Card>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-10">
+      <LoginFoliage className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto h-[clamp(180px,34vh,330px)] w-full max-w-6xl text-brand" />
+      <div className="login-panel-enter vellum-heavy relative z-10 w-full max-w-sm rounded-t-[7rem] rounded-b-2xl px-7 pt-14 pb-8 sm:px-9">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="inline-flex size-12 items-center justify-center rounded-full bg-brand/10 text-brand">
+            <BrandIcon className="size-6" noSpin />
+          </span>
+          <h1 className="font-prose text-[1.65rem] leading-tight font-semibold tracking-tight">
+            {title}
+          </h1>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="mt-8">{children}</div>
+      </div>
     </main>
   )
 }

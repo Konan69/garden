@@ -2,12 +2,18 @@ import { useState } from 'react'
 import { GARDEN_ANALYTICS_EVENTS } from '@garden/observability/analytics/events'
 import { toast } from 'sonner'
 import { LoginForm } from '@/components/login-form'
+import { LoginFoliage } from '@/components/login-foliage'
 import { authClient } from '@/lib/auth/client'
 import {
   capturePostHogBrowserEvent,
   postHogBrowserClient,
 } from '@/lib/posthog-browser'
 
+/**
+ * Owns Garden's public authentication surface and its account-mode state.
+ * Privacy and terms now remain visible below the panel because `/login` is the
+ * current landing page after `/` redirects unauthenticated visitors here.
+ */
 export function LoginPage({
   onSuccess,
   initialEmail,
@@ -79,26 +85,43 @@ export function LoginPage({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <LoginForm
-        className="w-full max-w-5xl"
-        mode={mode}
-        name={name}
-        email={email}
-        password={password}
-        error={error}
-        loading={loading}
-        onSubmit={handleSubmit}
-        onNameChange={setName}
-        emailReadonly={lockedEmail}
-        invitationStatusMessage={invitationStatusMessage}
-        invitationWorkspaceName={invitationWorkspaceName}
-        onEmailChange={lockedEmail ? () => undefined : setEmail}
-        onPasswordChange={setPassword}
-        onToggleMode={() =>
-          setMode((current) => (current === 'signin' ? 'signup' : 'signin'))
-        }
-      />
+    <div className="relative flex min-h-dvh flex-col overflow-y-auto px-6 py-6">
+      <LoginFoliage className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto h-[clamp(180px,34vh,330px)] w-full max-w-6xl text-brand" />
+      <main className="flex flex-1 items-center justify-center py-4">
+        <LoginForm
+          className="relative z-10 w-full max-w-sm"
+          mode={mode}
+          name={name}
+          email={email}
+          password={password}
+          error={error}
+          loading={loading}
+          onSubmit={handleSubmit}
+          onNameChange={setName}
+          emailReadonly={lockedEmail}
+          invitationStatusMessage={invitationStatusMessage}
+          invitationWorkspaceName={invitationWorkspaceName}
+          onEmailChange={lockedEmail ? () => undefined : setEmail}
+          onPasswordChange={setPassword}
+          onToggleMode={() =>
+            setMode((current) => (current === 'signin' ? 'signup' : 'signin'))
+          }
+        />
+      </main>
+      <footer className="relative z-10 flex items-center justify-center gap-4 pt-3 text-xs text-muted-foreground">
+        <a
+          href="/privacy"
+          className="transition-colors hover:text-foreground hover:underline hover:underline-offset-4"
+        >
+          Privacy
+        </a>
+        <a
+          href="/terms"
+          className="transition-colors hover:text-foreground hover:underline hover:underline-offset-4"
+        >
+          Terms
+        </a>
+      </footer>
     </div>
   )
 }

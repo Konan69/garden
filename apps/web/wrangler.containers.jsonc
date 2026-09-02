@@ -118,6 +118,16 @@
     "SANDBOX_LOG_LEVEL": "warn",
     "GARDEN_LOG_LEVEL": "warn",
     "HELIX_URL": "http://localhost:6968",
+    // Offline/local-model config. Empty string means "unset"; `pnpm
+    // dev:offline` overrides via process env (wrangler only forwards env keys
+    // that are declared in `vars` or `secrets.required`). Deployed workers
+    // never set these, so production stays on Workers AI.
+    "GARDEN_OFFLINE": "",
+    "GARDEN_MODEL_PROVIDER": "",
+    "GARDEN_MODEL_BASE_URL": "",
+    "GARDEN_MODEL_ID": "",
+    "GARDEN_MODEL_API_KEY": "",
+    "GARDEN_MODEL_CONTEXT_WINDOW_TOKENS": "",
   },
   "migrations": [
     {
