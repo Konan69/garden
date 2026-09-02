@@ -140,7 +140,7 @@ importers:
         version: typescript@7.0.2
       alchemy:
         specifier: ^0.93.12
-        version: 0.93.12(@cloudflare/vite-plugin@1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260714.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1)))(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@types/pg@8.20.0)(kysely@0.28.17)(pg@8.20.0)(sql.js@1.14.1)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260714.1)
+        version: 0.93.12(@cloudflare/vite-plugin@1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260801.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1)))(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@types/pg@8.20.0)(kysely@0.28.17)(pg@8.20.0)(sql.js@1.14.1)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260801.1)
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -216,6 +216,12 @@ importers:
       '@floating-ui/dom':
         specifier: ^1.7.6
         version: 1.7.6
+      '@fontsource-variable/geist-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/inter':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@garden/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
@@ -2163,6 +2169,12 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource-variable/geist-mono@5.3.0':
+    resolution: {integrity: sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw==}
+
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
 
   '@graphql-tools/executor@1.5.6':
     resolution: {integrity: sha512-2LP5uG/oXPggFa2hoPeq7HTbQ/yWLhY1jyk5OcGIlgAWRlgyfDnFxvfxsD2CUtYrv0dzbJZkRDBRjepgm09dDQ==}
@@ -10300,12 +10312,6 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260801.1
 
-  '@cloudflare/unenv-preset@2.7.7(unenv@2.0.0-rc.21)(workerd@1.20260714.1)':
-    dependencies:
-      unenv: 2.0.0-rc.21
-    optionalDependencies:
-      workerd: 1.20260714.1
-
   '@cloudflare/unenv-preset@2.7.7(unenv@2.0.0-rc.21)(workerd@1.20260801.1)':
     dependencies:
       unenv: 2.0.0-rc.21
@@ -10326,9 +10332,9 @@ snapshots:
       - utf-8-validate
       - workerd
 
-  '@cloudflare/vite-plugin@1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260714.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1))':
+  '@cloudflare/vite-plugin@1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260801.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1))':
     dependencies:
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260714.1)
+      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260801.1)
       miniflare: 4.20260520.0(@types/node@25.6.0)
       unenv: 2.0.0-rc.24
       vite: 8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
@@ -10749,6 +10755,10 @@ snapshots:
       react-dom: 19.2.3(react@19.2.3)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource-variable/geist-mono@5.3.0': {}
+
+  '@fontsource-variable/inter@5.3.0': {}
 
   '@graphql-tools/executor@1.5.6(graphql@16.12.0)':
     dependencies:
@@ -13524,10 +13534,10 @@ snapshots:
       - utf-8-validate
       - workerd
 
-  alchemy@0.93.12(@cloudflare/vite-plugin@1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260714.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1)))(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@types/pg@8.20.0)(kysely@0.28.17)(pg@8.20.0)(sql.js@1.14.1)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260714.1):
+  alchemy@0.93.12(@cloudflare/vite-plugin@1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260801.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1)))(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@types/pg@8.20.0)(kysely@0.28.17)(pg@8.20.0)(sql.js@1.14.1)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260801.1):
     dependencies:
       '@aws-sdk/credential-providers': 3.1089.0
-      '@cloudflare/unenv-preset': 2.7.7(unenv@2.0.0-rc.21)(workerd@1.20260714.1)
+      '@cloudflare/unenv-preset': 2.7.7(unenv@2.0.0-rc.21)(workerd@1.20260801.1)
       '@cloudflare/workers-types': 4.20260702.1
       '@iarna/toml': 2.2.5
       '@octokit/rest': 21.1.1
@@ -13557,7 +13567,7 @@ snapshots:
       ws: 8.21.0
       yaml: 2.9.0
     optionalDependencies:
-      '@cloudflare/vite-plugin': 1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260714.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1))
+      '@cloudflare/vite-plugin': 1.37.3(@types/node@25.6.0)(vite@8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260801.1)(wrangler@4.120.0(@cloudflare/workers-types@5.20260808.1))
       vite: 8.2.1(@types/node@25.6.0)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'

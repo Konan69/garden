@@ -85,6 +85,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Cabinet Grotesk font
+
+Garden vendors one Cabinet Grotesk woff2 (weight 700) at
+`packages/ui/fonts/cabinet-grotesk/cabinet-grotesk-700.woff2`, downloaded from
+the Fontshare CDN (Indian Type Foundry). Cabinet Grotesk is not published to
+npm or Google Fonts, and the design system only uses the bold weight for
+display titles.
+
+Licensed under the ITF Free Font License (free for personal and commercial
+use). Source and license details:
+`packages/ui/fonts/cabinet-grotesk/LICENSE.txt`.
+
 ## shadcn/ui
 
 Garden's files under `packages/ui/components/ui` and
