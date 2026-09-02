@@ -55,7 +55,11 @@ import {
   probeSandboxCommand,
   type SandboxExecResult,
 } from './sandbox-debug'
-import { createAgentModel } from './model'
+import {
+  type AgentModelEnv,
+  createAgentModel,
+  resolveAgentModelProfile,
+} from './model'
 import { AiObservation } from './ai-observation'
 import {
   classifyGardenContextOverflow,
@@ -100,7 +104,7 @@ import {
 import {
   DocumentArtifactProjection,
   documentArtifactProjectionLayer,
-  makeWorkersAiDocumentMarkdownLayer,
+  documentMarkdownLayerForEnv,
 } from './documents/document-artifact-projection'
 import { makeDocumentArtifactDurableRepositoryLayer } from './documents/document-artifact-repository'
 import { IssueRunSubAgent } from './issue-run-sub-agent'
@@ -118,7 +122,8 @@ import {
 } from './run-workflow'
 import { logAgentSocketError } from './websocket-errors'
 
-type AgentRuntimeEnv = Cloudflare.Env & {
+type AgentRuntimeEnv = Cloudflare.Env &
+  AgentModelEnv & {
   BETTER_AUTH_SECRET: string
   BETTER_AUTH_URL: string
   HYPERDRIVE: Hyperdrive
@@ -1208,7 +1213,7 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
           ),
         ),
         documentArtifactProjectionLayer.pipe(
-          Layer.provide(makeWorkersAiDocumentMarkdownLayer(this.env.AI)),
+          Layer.provide(documentMarkdownLayerForEnv(this.env)),
         ),
       ),
       documentArtifactEventsLayer,
@@ -1217,7 +1222,12 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
 
   override messageConcurrency: MessageConcurrency = 'merge'
   override chatRecovery = true
-  override contextOverflow = createGardenContextOverflow()
+  override contextOverflow = createGardenContextOverflow(
+    // Field initializers run after super(), so this.env is populated: offline
+    // local models need overflow bounds scaled to their context window, not
+    // the 262k Workers AI default.
+    resolveAgentModelProfile(this.env),
+  )
   override classifyChatError = classifyGardenContextOverflow
   private readonly aiObservation = new AiObservation(this.ctx, this.env)
   private mcpController: RuntimeMcpController | null = null
@@ -1263,7 +1273,11 @@ export class ChatSubAgent extends Think<AgentRuntimeEnv> {
   override async configureSession(session: Session) {
     const promptContexts = this.getPromptContextOptions()
 
-    return configureThinkCompaction(session, this.getModel())
+    return configureThinkCompaction(
+      session,
+      this.getModel(),
+      resolveAgentModelProfile(this.env),
+    )
       .withContext('foundation', promptContexts.foundation)
       .withContext('agent', promptContexts.agent)
       .withContext('workspace', promptContexts.workspace)

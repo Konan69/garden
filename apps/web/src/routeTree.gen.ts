@@ -9,9 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as RoadmapRouteImport } from './routes/roadmap'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HarnessyRouteImport } from './routes/harnessy'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
@@ -109,6 +111,11 @@ import { Route as ApiBrainFilesIdContentRouteImport } from './routes/api/brain/f
 import { Route as ApiAutomationsIdTriggersTriggerIdRouteImport } from './routes/api/automations/$id/triggers/$triggerId'
 import { Route as ApiConnectionsConnectorIdToolsNameGrantRouteImport } from './routes/api/connections/$connectorId/tools/$name/grant'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -122,6 +129,11 @@ const RoadmapRoute = RoadmapRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -632,9 +644,11 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
   '/api/$': typeof ApiSplatRoute
   '/api/agents': typeof ApiAgentsRouteWithChildren
@@ -732,9 +746,11 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
   '/api/$': typeof ApiSplatRoute
   '/api/agents': typeof ApiAgentsRouteWithChildren
@@ -834,9 +850,11 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/harnessy': typeof HarnessyRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/roadmap': typeof RoadmapRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
   '/api/$': typeof ApiSplatRoute
   '/api/agents': typeof ApiAgentsRouteWithChildren
@@ -936,9 +954,11 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/harnessy'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/roadmap'
     | '/signup'
+    | '/terms'
     | '/workspace'
     | '/api/$'
     | '/api/agents'
@@ -1036,9 +1056,11 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/harnessy'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/roadmap'
     | '/signup'
+    | '/terms'
     | '/workspace'
     | '/api/$'
     | '/api/agents'
@@ -1137,9 +1159,11 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/harnessy'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/roadmap'
     | '/signup'
+    | '/terms'
     | '/_authenticated/workspace'
     | '/api/$'
     | '/api/agents'
@@ -1239,9 +1263,11 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HarnessyRoute: typeof HarnessyRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   RoadmapRoute: typeof RoadmapRoute
   SignupRoute: typeof SignupRoute
+  TermsRoute: typeof TermsRoute
   ApiSplatRoute: typeof ApiSplatRoute
   ApiAgentsRoute: typeof ApiAgentsRouteWithChildren
   ApiAutomationsRoute: typeof ApiAutomationsRouteWithChildren
@@ -1281,6 +1307,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -1300,6 +1333,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -2317,9 +2357,11 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   HarnessyRoute: HarnessyRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   RoadmapRoute: RoadmapRoute,
   SignupRoute: SignupRoute,
+  TermsRoute: TermsRoute,
   ApiSplatRoute: ApiSplatRoute,
   ApiAgentsRoute: ApiAgentsRouteWithChildren,
   ApiAutomationsRoute: ApiAutomationsRouteWithChildren,

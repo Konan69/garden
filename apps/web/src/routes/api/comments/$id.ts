@@ -54,10 +54,7 @@ export const Route = createFileRoute('/api/comments/$id')({
           .where(eq(schema.issueComment.id, params.id))
         if (!existingComment) return notFound('Comment not found')
 
-        if (
-          existingComment.authorType === 'user' &&
-          existingComment.authorId !== session.user.id
-        ) {
+        if (existingComment.authorId !== session.user.id) {
           return Response.json(
             { error: 'Comment access denied' },
             { status: 403 },
@@ -85,10 +82,7 @@ export const Route = createFileRoute('/api/comments/$id')({
           .where(eq(schema.issueComment.id, params.id))
         if (!existingComment) return notFound('Comment not found')
 
-        if (
-          existingComment.authorType === 'user' &&
-          existingComment.authorId !== session.user.id
-        ) {
+        if (existingComment.authorId !== session.user.id) {
           return Response.json(
             { error: 'Comment access denied' },
             { status: 403 },

@@ -71,17 +71,45 @@ assert.match(gitignoreSource, /apps\/web\/wrangler\.local\.jsonc/)
 assert.match(gitignoreSource, /apps\/web\/wrangler\.containers\.local\.jsonc/)
 assert.match(devSource, /wrangler\.containers\.local\.jsonc/)
 assert.match(devSource, /wrangler\.local\.jsonc/)
-assert.match(devSource, /CLOUDFLARE_VITE_REMOTE_BINDINGS = '1'/)
+// Remote bindings stay on for the default dev path; only the explicit
+// --offline flag may turn them off (the offline mode never touches the
+// wrangler configs, so the single AI "remote": true assertions above keep
+// guarding the deploy surface).
+assert.match(
+  devSource,
+  /CLOUDFLARE_VITE_REMOTE_BINDINGS = offline \? '0' : '1'/,
+)
+assert.match(devSource, /const offline = args\.has\('--offline'\)/)
 assert.match(
   devSource,
   /useLocalOverlay = containers && existsSync\(localFile\)/,
 )
-assert.doesNotMatch(devSource, /localOnly|--local/)
+assert.doesNotMatch(devSource, /localOnly|--local\b/)
 assert.equal(
   packageJson.scripts.dev,
   'turbo run dev:local --ui=tui --filter=@garden/web',
 )
+assert.equal(
+  packageJson.scripts['dev:offline'],
+  'turbo run dev:offline --ui=tui --filter=@garden/web',
+)
 assert.equal(webPackageJson.scripts['dev:local'], 'node ./scripts/dev.mjs')
+assert.equal(
+  webPackageJson.scripts['dev:offline'],
+  'node ./scripts/dev.mjs --offline',
+)
+
+// The deployed model default must remain Workers AI: offline/openai-compatible
+// is opt-in via GARDEN_MODEL_PROVIDER / GARDEN_OFFLINE only.
+const modelSource = readFileSync(
+  resolve(root, 'packages/agent-runtime/src/model.ts'),
+  'utf8',
+)
+assert.match(
+  modelSource,
+  /DEFAULT_AGENT_MODEL_PROFILE =\s*\n?\s*agentModelProfiles\.kimiK27CodeWorkersAi/,
+)
+assert.match(modelSource, /:\s*'workers-ai'\s*\n\s*if \(provider === 'workers-ai'\) return DEFAULT_AGENT_MODEL_PROFILE/)
 
 const uniqueFields = [
   'appName',

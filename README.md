@@ -32,19 +32,27 @@ skills, and keep technical work tied to shared tasks.
 
 ## Run Garden locally
 
-The normal development setup keeps the web app and Cloudflare's local D1, R2,
-Durable Object, and Workflow simulators on your machine. It connects to your
-Postgres database and uses Cloudflare's remote Workers AI binding. Docker is
-not required to start this mode.
+Garden runs locally in two modes:
+
+- **Offline mode** (`pnpm dev:offline`) — the recommended first run. No
+  Cloudflare account, no sign-ups: the model runs on your machine through
+  [Ollama](https://ollama.com), and everything else (database, storage,
+  agents) is local too.
+- **Standard mode** (`pnpm dev`) — the same local app, but model calls go to
+  Cloudflare Workers AI. Needs a Cloudflare account on the Workers paid plan.
+
+Both modes share the same setup through step 2, and both use the dockerized
+local Postgres as the recommended database — a fresh, private instance that
+migrations can own.
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 22.12 or newer
-- pnpm 10.33.0; Corepack is the simplest way to install the pinned version
-- A Postgres database; [Neon](https://neon.tech) is the setup used by the
-  runtime
-- A Cloudflare account for Workers AI
-- Docker only when running the full test suite or Sandbox-container mode
+- pnpm 10.33.0 — `corepack enable` installs the pinned version for you in
+  step 1
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any
+  Docker engine) — runs the local Postgres, and optionally the local model
+- A Cloudflare account — **standard mode only**; skip it for offline mode
 
 ### 1. Clone and install
 
@@ -57,84 +65,145 @@ corepack install
 pnpm install --frozen-lockfile
 ```
 
-The repository pins pnpm 10.33.0 through the `packageManager` field in
-`package.json`.
+### 2. Create your environment file
 
-### 2. Sign in to Cloudflare
+```bash
+cp .env.example .env
+```
+
+Then fill in the two required secrets in `.env`. Generate each one separately
+(run the command twice; don't reuse one value):
+
+```bash
+openssl rand -base64 32
+```
+
+| Variable              | What to use                                          |
+| --------------------- | ---------------------------------------------------- |
+| `BETTER_AUTH_SECRET`  | First generated value                                |
+| `EXECUTOR_SECRET_KEY` | Second generated value                               |
+
+Everything else already has a working local default: `DATABASE_URL` points at
+the local Docker Postgres from step 3, and `BETTER_AUTH_URL` /
+`ENVIRONMENT` are preset. Connector and PostHog credentials are only needed
+for features you explicitly configure.
+
+That's all the configuration offline mode needs. For standard mode you will
+also fill in `CLOUDFLARE_ACCOUNT_ID` — covered below.
+
+### 3. Offline mode — no Cloudflare account
+
+First, get a local model running. Pick one of these:
+
+**Option A — Ollama in Docker** (no extra installs):
+
+```bash
+pnpm offline:up:ollama                                    # starts Postgres + Ollama
+docker compose -f compose.dev.yaml exec ollama ollama pull qwen3:8b
+```
+
+**Option B — the Ollama app** (recommended on Apple Silicon: Docker
+containers can't use the Mac GPU, so the native app is much faster):
+
+```bash
+# install from https://ollama.com, then:
+ollama pull qwen3:8b
+pnpm offline:up                                           # starts Postgres only
+```
+
+Heads up: `qwen3:8b` is a one-time **~5 GB download**, and the Docker images
+on the first `pnpm offline:up` add a few hundred MB more. On a slow
+connection, start the pull and get coffee.
+
+Then migrate the database and start the app:
+
+```bash
+pnpm --filter @garden/db db:migrate
+pnpm dev:offline
+```
+
+Open [http://localhost:3000](http://localhost:3000), create an account, then
+create a workspace. That signup-to-workspace flow is the first-run health
+check; if it works, everything works.
+
+The model is configurable — any OpenAI-compatible API works, including hosted
+ones when you want a stronger model without a Cloudflare account:
+
+| Variable                            | Default                        | Notes                                   |
+| ----------------------------------- | ------------------------------ | --------------------------------------- |
+| `GARDEN_MODEL_BASE_URL`             | `http://localhost:11434/v1`    | Ollama; or e.g. `https://openrouter.ai/api/v1` |
+| `GARDEN_MODEL_ID`                   | `qwen3:8b`                     | Must support tool calling               |
+| `GARDEN_MODEL_API_KEY`              | unset                          | Required by hosted endpoints            |
+| `GARDEN_MODEL_CONTEXT_WINDOW_TOKENS`| `32768`                        | Sizes context compaction                |
+
+Offline limitations:
+
+- DOCX import uses a local converter (mammoth) instead of Workers AI document
+  conversion — fidelity is slightly reduced.
+- Agent quality tracks the model you point at; small local models may fumble
+  tool calls. A hosted endpoint fixes this without any Cloudflare setup.
+- Automation browser runs are untested offline.
+
+### 4. Standard mode — Cloudflare Workers AI
+
+Sign in to Cloudflare and note your Account ID:
 
 ```bash
 pnpm --filter @garden/web exec wrangler login
 pnpm --filter @garden/web exec wrangler whoami
 ```
 
-Copy the Account ID reported by `wrangler whoami`; it becomes
-`CLOUDFLARE_ACCOUNT_ID` in the next step.
-
-### 3. Configure the environment
+Copy the Account ID from `wrangler whoami` into `CLOUDFLARE_ACCOUNT_ID` in
+`.env`. Then:
 
 ```bash
-cp .env.example .env
-```
-
-Fill in these required values in the root `.env` file:
-
-| Variable                | What to use                                                   |
-| ----------------------- | ------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | Account ID from `wrangler whoami`                              |
-| `DATABASE_URL`          | Connection string for a dedicated Postgres database           |
-| `BETTER_AUTH_SECRET`    | A high-entropy secret of at least 32 characters                |
-| `EXECUTOR_SECRET_KEY`   | A second, separate high-entropy secret for connector execution |
-
-Generate the two secrets separately; do not reuse one value:
-
-```bash
-openssl rand -base64 32
-```
-
-`BETTER_AUTH_URL=http://localhost:3000` and `ENVIRONMENT=development` already
-have local defaults in `.env.example`. PostHog values are optional locally but
-required for deployment. Connector credentials are needed only for the
-providers you choose to configure.
-
-### 4. Migrate and start
-
-```bash
-pnpm --filter @garden/db db:migrate
+pnpm offline:up                        # local Postgres (skip if already running)
+pnpm --filter @garden/db db:migrate    # skip if already migrated
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), create an account, then
-create a workspace. Use that signup-to-workspace flow as a manual first-run
-check; Garden does not yet expose a dedicated health endpoint.
+`pnpm dev` starts the app on port 3000 with local D1, R2, Durable Object, and
+Workflow state, Hyperdrive pointed at `DATABASE_URL`, and the remote Workers
+AI binding. Two things to know about that binding:
 
-`pnpm dev` starts:
-
-- the TanStack Start app on port 3000;
-- local D1, R2, Durable Object, and Workflow state through the Workers
-  simulator;
-- Hyperdrive pointed at `DATABASE_URL`; and
-- the remote Workers AI binding, which may incur usage on your Cloudflare
-  account.
+- it may incur usage on your Cloudflare account; and
+- the default model (`@cf/moonshotai/kimi-k2.7-code`) requires the Workers
+  **paid** plan — on the free plan, chat turns fail with a model-availability
+  error. Use offline mode if you don't have a paid plan.
 
 ### Troubleshooting
 
-**Workers AI fails to start:** run `wrangler whoami` again and check that
-`CLOUDFLARE_ACCOUNT_ID` in `.env` belongs to the authenticated account.
+**Model calls fail in offline mode:** check the endpoint answers
+(`curl http://localhost:11434/v1/models`) and the model is pulled
+(`ollama list`, or
+`docker compose -f compose.dev.yaml exec ollama ollama list` for the Docker
+option).
 
-**Database migrations fail:** confirm the database exists, the connection
-string includes any connection options required by your provider, and the user
-can create and alter tables. Then rerun
-`pnpm --filter @garden/db db:migrate`.
+**Workers AI fails in standard mode:** run `wrangler whoami` again and check
+that `CLOUDFLARE_ACCOUNT_ID` in `.env` belongs to the authenticated account.
+If chat turns fail with a model-availability error, your account is on the
+Workers free plan (see above).
 
-**A connector is unavailable:** provider credentials are optional. Add only the
-matching variables from `.env.example`, then restart the development process.
+**Database migrations fail:** confirm Docker is running and
+`pnpm offline:up` reports the Postgres container healthy, then rerun
+`pnpm --filter @garden/db db:migrate`. For a non-Docker database, check the
+connection string and that the user can create and alter tables.
+
+**Postgres port conflict:** the local Postgres maps port 55432 specifically
+to avoid a system Postgres on 5432; if 55432 is also taken, override
+`DATABASE_URL`.
+
+**A connector is unavailable:** provider credentials are optional. Add only
+the matching variables from `.env.example`, then restart the development
+process.
 
 **The full test suite cannot start Postgres:** start Docker first. Database
 tests use Testcontainers and pull `postgres:16-alpine` on the first run.
 
 **Port 3000 is already in use:** stop the process that owns the port. The
-`pnpm dev:reset` helper uses broad process-name matching on macOS and Linux and
-may stop unrelated Vite, Workerd, or esbuild processes, so use it deliberately.
+`pnpm dev:reset` helper uses broad process-name matching on macOS and Linux
+and may stop unrelated Vite, Workerd, or esbuild processes, so use it
+deliberately.
 
 ### Sandbox-container mode
 
@@ -217,7 +286,7 @@ Browser ─── TanStack Start Worker ─── Neon Postgres (shared product 
                          └── Cloudflare Sandbox for container tasks
 ```
 
-Garden is Cloudflare-first. TanStack Start runs in a Worker, Durable Objects
+Garden is currently Cloudflare-first; while we continue to progressively decentralize the infrastructure. TanStack Start runs in a Worker, Durable Objects
 host agent and Model Context Protocol (MCP) sessions, Workflows manage
 long-running task and automation runs, and R2 stores files. Neon Postgres is the
 source of truth for shared product data.
@@ -282,11 +351,12 @@ Database commands:
 
 ## Project status
 
-The current focus is a dependable small-user beta: workspace isolation, run
-recovery, connector reliability, smoke coverage, and trustworthy approval and
-audit paths. The [roadmap](docs/roadmap.md) tracks beta work, and the
-[known-gaps index](docs/known-gaps/README.md) records unfinished or deferred
-areas.
+Garden is preparing for a small beta. We are focused on keeping workspaces
+separate, making failed runs recoverable, improving connections, and ensuring
+sensitive actions require the right approval. The [roadmap](docs/roadmap.md)
+also explains the longer local-first, edge-native, cloud-optional direction.
+The [known-gaps index](docs/known-gaps/README.md) clearly separates what works
+today from what still needs to be built or researched.
 
 On-premises and fully self-hosted operation are not current capabilities. See
 [`docs/core/DEFERRED.md`](docs/core/DEFERRED.md) for deliberate non-goals and
@@ -306,8 +376,8 @@ privately through [SECURITY.md](SECURITY.md).
 
 | Document                                                               | Covers                                      |
 | ---------------------------------------------------------------------- | ------------------------------------------- |
-| [`docs/roadmap.md`](docs/roadmap.md)                                   | Beta priorities and readiness checklist     |
-| [`docs/known-gaps/README.md`](docs/known-gaps/README.md)               | Current gaps by product and runtime area     |
+| [`docs/roadmap.md`](docs/roadmap.md)                                   | Beta priorities and longer product direction |
+| [`docs/known-gaps/README.md`](docs/known-gaps/README.md)               | Current gaps and future research boundaries  |
 | [`docs/core/PRD.md`](docs/core/PRD.md)                                 | Product requirements                        |
 | [`docs/core/technical.md`](docs/core/technical.md)                     | Architecture and current implementation     |
 | [`docs/design.md`](docs/design.md)                                     | Design system and interaction principles    |
