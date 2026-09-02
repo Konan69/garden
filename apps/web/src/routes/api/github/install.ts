@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/control-plane'
 import { schema, type Db } from '@/lib/server/db'
 import { appEnv } from '@/lib/server/env'
+import { captureApiFailure } from '@/lib/server/api-logging'
 import {
   connectorCallbackSearchParams,
   recordConnectorCallbackEvent,
@@ -112,7 +113,28 @@ export const Route = createFileRoute('/api/github/install')({
           })
         }
 
-        if (connectedInstallation && verifiedInstallation?.isErr()) {
+        if (
+          connectedInstallation &&
+          verifiedInstallation?.isErr() &&
+          verifiedInstallation.error.status !== 404
+        ) {
+          await captureApiFailure({
+            request,
+            event: 'github.installation.verify_failed',
+            error: verifiedInstallation.error,
+            level: 'warn',
+          })
+          return Response.json(
+            { error: 'Unable to verify the GitHub installation. Try again.' },
+            { status: 502 },
+          )
+        }
+
+        if (
+          connectedInstallation &&
+          verifiedInstallation?.isErr() &&
+          verifiedInstallation.error.status === 404
+        ) {
           await db
             .update(schema.githubAppInstallation)
             .set({ status: 'degraded', updatedAt: new Date() })
