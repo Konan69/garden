@@ -161,7 +161,8 @@ Use these directories to find the owner of a change:
 | `packages/app-state` | Client application state |
 | `packages/ui` | Shared interface components |
 
-Read `docs/core/technical.md` for the detailed architecture.
+Read the [technical architecture](../core/technical.md) for the detailed
+system model.
 
 ## Trace an issue run
 
@@ -188,8 +189,8 @@ owns durable execution. `IssueRunSubAgent` performs the agent work.
 
 ## Make and verify a change
 
-Read `AGENTS.md` before you edit code. It contains repository rules and links
-to framework-specific guidance.
+Read [`AGENTS.md`](../../AGENTS.md) before you edit code. It contains repository
+rules and links to framework-specific guidance.
 
 Run the checks for the package you changed while you work. For example:
 
