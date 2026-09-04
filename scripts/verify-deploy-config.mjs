@@ -210,10 +210,19 @@ assert.match(alchemySource, /WORKERS_CI_COMMIT_SHA/)
 assert.match(viteSource, /WORKERS_CI_COMMIT_SHA/)
 assert.match(viteSource, /batchSize:\s*100/)
 assert.match(viteSource, /deleteAfterUpload:\s*true/)
+assert.equal(
+  packageJson.scripts.deploy,
+  'pnpm typecheck && pnpm run deploy:migrate && pnpm run deploy:alchemy',
+)
+assert.equal(
+  packageJson.scripts['deploy:migrate'],
+  'pnpm --filter @garden/db db:migrate',
+)
 assert.match(
   packageJson.scripts['deploy:alchemy'],
   /GARDEN_DEPLOY_TARGET=production/,
 )
+assert.doesNotMatch(packageJson.scripts['deploy:preview'], /deploy:migrate/)
 assert.match(
   packageJson.scripts['deploy:preview:alchemy'],
   /GARDEN_DEPLOY_TARGET=preview/,
