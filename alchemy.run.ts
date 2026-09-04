@@ -203,6 +203,8 @@ export const web = await TanStackStart(deployTarget.workerId, {
     BRAIN_FILES: brainFiles,
     FILES: files,
     HYPERDRIVE: database,
+    HELIX_URL: plainEnv('HELIX_URL'),
+    HELIX_API_KEY: alchemy.secret.env.HELIX_API_KEY,
     DATABASE_URL: alchemy.secret.env.DATABASE_URL,
     BETTER_AUTH_SECRET: alchemy.secret.env.BETTER_AUTH_SECRET,
     RESEND_API_KEY: alchemy.secret.env.RESEND_API_KEY,
