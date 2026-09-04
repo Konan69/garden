@@ -11,7 +11,6 @@ import {
   requireSession,
   toInvitation,
   unauthorized,
-  badRequest,
 } from '@/lib/server/control-plane'
 import { schema, type Db } from '@/lib/server/db'
 import { sendOrganizationInvitationEmail } from '@/lib/server/email/invitation'
@@ -334,7 +333,10 @@ export const Route = createFileRoute('/api/workspaces/$id/members')({
           ok: (invitation) => Response.json(invitation),
           err: (error) =>
             error instanceof WorkspaceInvitationRequestError
-              ? badRequest(error.message)
+              ? Response.json(
+                  { error: error.message },
+                  { status: error.status },
+                )
               : Response.json(
                   { error: error.message },
                   { status: error.status },
