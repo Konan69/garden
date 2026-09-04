@@ -29,7 +29,7 @@ const serverSchema = {
   // Optional: absent in environments without an Org Brain HelixDB instance.
   // The brain routes/tools report an unconfigured error rather than failing the
   // turn when these are missing.
-  HELIX_URL: z.string().min(1).optional(),
+  HELIX_URL: z.httpUrl().optional(),
   HELIX_API_KEY: z.string().min(1).optional(),
   ENVIRONMENT: z
     .enum(['development', 'test', 'staging', 'production'])

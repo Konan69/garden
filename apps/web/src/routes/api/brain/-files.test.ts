@@ -2,12 +2,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { Effect, Layer, ManagedRuntime } from 'effect'
-import { ItemId, WorkspaceId, type BrainItem } from '@garden/brain/domain'
+import { Effect, Layer, ManagedRuntime, DateTime } from 'effect'
+import { ItemId, WorkspaceId, type BrainItem, Kind } from '@garden/brain/domain'
+import {
+  deleteBrainFile,
+  getBrainFileStatus,
+  retryBrainFileIndexing,
+} from './files/$id'
+import { getBrainFileContent } from './files/$id/content'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import type { AppRequestContext } from '@/lib/server/context'
-import { postBrainFileUpload } from './files'
+import { postBrainFileUpload, getBrainFiles } from './files'
+import { getBrainFileExtractedText } from './files/$id/text'
 
 const FIXTURES = resolve(process.cwd(), '../../packages/brain/fixtures/docs')
 
@@ -30,7 +37,8 @@ vi.mock('@garden/app-state/platform/rpc', () => ({
 }))
 
 vi.mock('@garden/agent-runtime', () => ({
-  buildContentDisposition: () => 'inline',
+  buildContentDisposition: (disposition: 'attachment' | 'inline') =>
+    disposition,
   normalizeDownloadFilename: (name: string) => name,
 }))
 
@@ -66,6 +74,12 @@ vi.mock('@garden/brain/services/web', async () => {
                 ? {}
                 : { canonical: input.canonical }),
               indexed: false,
+              ...(input.indexStatus === undefined
+                ? {}
+                : { indexStatus: input.indexStatus }),
+              ...(input.indexError === undefined
+                ? {}
+                : { indexError: input.indexError }),
               origin: input.origin,
               ...(input.body === undefined ? {} : { body: input.body }),
             }
@@ -80,6 +94,8 @@ vi.mock('@garden/brain/services/web', async () => {
             const indexed: BrainItem = {
               ...item,
               indexed: true,
+              indexStatus: 'ready',
+              indexError: '',
               body: `${item.label} indexed content`,
             }
             mockBrainItems.set(item.id, indexed)
@@ -100,12 +116,56 @@ vi.mock('@garden/brain/services/web', async () => {
             ),
           addText: () => Effect.die('unused addText'),
           updateItemMetadata: () => Effect.die('unused updateItemMetadata'),
-          read: () => Effect.die('unused read'),
+          updateIndexStatus: ({ itemId, tenantId, status, error }) => {
+            const item = mockBrainItems.get(itemId)
+            if (item === undefined || item.tenantId !== tenantId) {
+              return Effect.die(`missing test brain item ${itemId}`)
+            }
+
+            const updated: BrainItem = {
+              ...item,
+              indexed: status === 'ready',
+              indexStatus: status,
+              indexError: error?.trim() ?? '',
+            }
+            mockBrainItems.set(item.id, updated)
+            return Effect.succeed(updated)
+          },
+          deleteFile: (itemId, tenantId) => {
+            const item = mockBrainItems.get(itemId)
+            if (item === undefined || item.tenantId !== tenantId) {
+              return Effect.succeed(null)
+            }
+
+            mockBrainItems.delete(item.id)
+            return Effect.succeed(item)
+          },
+          read: (itemId, tenantId) => {
+            const item = mockBrainItems.get(itemId)
+
+            return Effect.succeed(
+              item !== undefined && item.tenantId === tenantId ? item : null,
+            )
+          },
+          listFiles: ({ tenantId, limit = 100 }) =>
+            Effect.succeed(
+              [...mockBrainItems.values()]
+                .filter((item) => item.tenantId === tenantId)
+                .sort((left, right) => left.label.localeCompare(right.label))
+                .slice(0, limit),
+            ),
           linkSections: () => Effect.die('unused linkSections'),
           sectionsOf: () => Effect.die('unused sectionsOf'),
           observeMention: () => Effect.die('unused observeMention'),
           linkItems: () => Effect.die('unused linkItems'),
           neighborhood: () => Effect.die('unused neighborhood'),
+          readFileItem: (itemId, tenantId) => {
+            const item = mockBrainItems.get(itemId)
+
+            return Effect.succeed(
+              item !== undefined && item.tenantId === tenantId ? item : null,
+            )
+          },
           readFile: () => Effect.die('unused readFile'),
         }),
       ),
@@ -119,6 +179,8 @@ vi.mock('@/lib/server/context', () => ({
 vi.mock('@/lib/server/control-plane', () => ({
   badRequest: (message: string) =>
     Response.json({ error: message }, { status: 400 }),
+  notFound: (message: string) =>
+    Response.json({ error: message }, { status: 404 }),
   requireWorkspaceContext: mockRequireWorkspaceContext,
 }))
 
@@ -219,7 +281,7 @@ async function upload({
   const deferred: Promise<unknown>[] = []
   mockRequireAppRequestContext.mockReturnValueOnce({
     env: {
-      FILES: bucket,
+      BRAIN_FILES: bucket,
       AgentDO: {},
       HYPERDRIVE: {},
       AI: stubAi,
@@ -245,6 +307,251 @@ async function upload({
   return { response, objects, deferred, workspaceId: id }
 }
 
+function storeBrainFile({
+  indexed,
+  indexStatus,
+  itemId = 'item-status',
+  label = 'notes.txt',
+  r2Key = 'brain-files/ws-status/notes.txt',
+  workspaceId = 'ws-status',
+  body,
+}: {
+  indexed: boolean
+  indexStatus?: BrainItem['indexStatus']
+  itemId?: string
+  label?: string
+  r2Key?: string | undefined
+  workspaceId?: string
+  body?: string
+}) {
+  const item: BrainItem = {
+    id: ItemId.make(itemId),
+    tenantId: WorkspaceId.make(workspaceId),
+    kind: Kind.make('file'),
+    label,
+    ...(r2Key === undefined ? {} : { r2Key }),
+    indexed,
+    ...(indexStatus === undefined ? {} : { indexStatus }),
+    origin: {
+      actor: { _tag: 'Human', userId: 'user-route' },
+      at: DateTime.makeUnsafe(new Date()),
+    },
+    ...(body === undefined ? {} : { body }),
+  }
+
+  mockBrainItems.set(item.id, item)
+  return item
+}
+
+async function getFileStatus({
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  const { bucket } = makeFiles()
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      BRAIN_FILES: bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  return getBrainFileStatus({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
+}
+
+/** Runs the retry route with one workspace-scoped mocked Brain file. */
+async function retryFile({
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  const { bucket } = makeFiles()
+  const deferred: Promise<unknown>[] = []
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      BRAIN_FILES: bucket,
+      AgentDO: {},
+      HYPERDRIVE: {},
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+    waitUntil: (promise: Promise<unknown>) => {
+      deferred.push(promise)
+    },
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  const response = await retryBrainFileIndexing({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
+
+  return { deferred, response }
+}
+
+/** Runs the delete route with mocked Brain and R2 state. */
+async function deleteFile({
+  files = makeFiles(),
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  files?: ReturnType<typeof makeFiles>
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      BRAIN_FILES: files.bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  const response = await deleteBrainFile({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
+
+  return { files, response }
+}
+
+/** Runs the content route with configurable workspace and R2 object metadata. */
+async function getFileContent({
+  download = false,
+  itemId = 'item-status',
+  objectBody = 'Garden notes',
+  storedContentType = 'text/plain',
+  workspaceId = 'ws-status',
+}: {
+  download?: boolean
+  itemId?: string
+  objectBody?: string | null
+  storedContentType?: string
+  workspaceId?: string
+} = {}) {
+  const get = vi.fn(async () => {
+    if (objectBody === null) return null
+
+    return {
+      body: new Response(objectBody).body,
+      httpEtag: '"brain-file-etag"',
+      writeHttpMetadata: (headers: Headers) => {
+        headers.set('Content-Type', storedContentType)
+      },
+    }
+  })
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      BRAIN_FILES: { get },
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  const response = await getBrainFileContent({
+    context: {} as AppRequestContext,
+    request: new Request(
+      `https://garden.test/api/brain/files/${itemId}/content${download ? '?download' : ''}`,
+    ),
+    params: { id: itemId },
+  })
+
+  return { get, response }
+}
+
+/** Runs the extracted-text route with one mocked workspace file. */
+async function getFileExtractedText({
+  itemId = 'item-status',
+  workspaceId = 'ws-status',
+}: {
+  itemId?: string
+  workspaceId?: string
+} = {}) {
+  const { bucket } = makeFiles()
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      BRAIN_FILES: bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  return getBrainFileExtractedText({
+    context: {} as AppRequestContext,
+    params: { id: itemId },
+  })
+}
+
+/** Runs the list route for the supplied mocked active workspace. */
+async function getFiles(workspaceId = 'ws-status') {
+  const { bucket } = makeFiles()
+
+  mockRequireAppRequestContext.mockReturnValueOnce({
+    env: {
+      BRAIN_FILES: bucket,
+      AI: stubAi,
+      HELIX_URL: 'http://localhost:6968',
+      HELIX_API_KEY: '',
+    },
+    auth: {},
+  } as unknown as AppRequestContext)
+
+  mockRequireWorkspaceContext.mockResolvedValueOnce({
+    session: { user: { id: 'user-route' } },
+    workspaceId,
+  })
+
+  return getBrainFiles({
+    context: {} as AppRequestContext,
+  })
+}
+
 describe('POST /api/brain/files', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -258,8 +565,18 @@ describe('POST /api/brain/files', () => {
     })
     expect(response.status, await response.clone().text()).toBe(201)
     await Promise.all(deferred)
-    const { item } = (await response.json()) as { item: { id: string } }
+    const { item } = (await response.json()) as {
+      item: {
+        id: string
+        name: string
+        status: string
+      }
+    }
+
     expect(item.id).toBeTruthy()
+    expect(item.name).toBe('helixdb.pdf')
+    expect(item.status).toBe('processing')
+    expect(Object.keys(item).sort()).toEqual(['id', 'name', 'status'])
     expect(objects.size).toBe(1)
     expect([...objects.keys()][0]).toContain(workspaceId)
 
@@ -302,7 +619,7 @@ describe('POST /api/brain/files', () => {
     const { objects, bucket } = makeFiles()
     mockRequireAppRequestContext.mockReturnValueOnce(
       fakeContext({
-        FILES: bucket,
+        BRAIN_FILES: bucket,
         AgentDO: {},
         HYPERDRIVE: {},
         AI: stubAi,
@@ -337,6 +654,22 @@ describe('POST /api/brain/files', () => {
     expect(objects.size).toBe(0)
   })
 
+  it('hides storage failures behind a service response', async () => {
+    const files = makeFiles()
+    files.bucket.put = vi.fn().mockRejectedValue(new Error('private R2 detail'))
+
+    const { response } = await upload({
+      filename: 'helixdb.pdf',
+      type: 'application/pdf',
+      files,
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'Brain upload is unavailable',
+    })
+  })
+
   it.each([
     {
       order: 'before',
@@ -366,6 +699,7 @@ describe('POST /api/brain/files', () => {
       expect(first.response.status, await first.response.clone().text()).toBe(
         201,
       )
+      expect(first.deferred).toHaveLength(1)
       await Promise.all(first.deferred)
       const activeKey = [...files.objects.keys()][0]
       expect(activeKey).toContain(activeId)
@@ -377,7 +711,7 @@ describe('POST /api/brain/files', () => {
         files,
       })
       expect(second.response.status).toBe(201)
-      await Promise.all(second.deferred)
+      expect(second.deferred).toHaveLength(0)
       const firstBody = (await first.response.json()) as {
         item: { id: string }
       }
@@ -388,4 +722,347 @@ describe('POST /api/brain/files', () => {
       expect([...files.objects.keys()]).toEqual([activeKey])
     },
   )
+})
+
+describe('GET /api/brain/files/$id', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it.each([
+    { indexed: false, status: 'processing' },
+    { indexed: true, status: 'ready' },
+    { indexed: false, indexStatus: 'failed' as const, status: 'failed' },
+  ])('reports a file as $status', async ({ indexed, indexStatus, status }) => {
+    const item = storeBrainFile({ indexed, indexStatus })
+
+    const response = await getFileStatus()
+    expect(response.status).toBe(200)
+
+    const body = (await response.json()) as {
+      item: {
+        id: string
+        name: string
+        status: string
+      }
+    }
+
+    expect(body.item).toEqual({
+      id: item.id,
+      name: item.label,
+      status,
+    })
+    expect(Object.keys(body.item).sort()).toEqual(['id', 'name', 'status'])
+  })
+
+  it('does not expose a file from another workspace', async () => {
+    storeBrainFile({
+      indexed: true,
+      workspaceId: 'workspace-one',
+    })
+
+    const response = await getFileStatus({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('rejects an empty file id', async () => {
+    const response = await getFileStatus({ itemId: '' })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid Brain file id' })
+  })
+})
+
+describe('POST /api/brain/files/$id', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('retries a failed file and schedules indexing', async () => {
+    const item = storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+    })
+
+    const { deferred, response } = await retryFile()
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({
+      item: {
+        id: item.id,
+        name: item.label,
+        status: 'processing',
+      },
+    })
+    expect(deferred).toHaveLength(1)
+
+    await Promise.all(deferred)
+    expect(mockBrainItems.get(item.id)).toEqual(
+      expect.objectContaining({
+        indexed: true,
+        indexStatus: 'ready',
+      }),
+    )
+  })
+
+  it('does not retry a file from another workspace', async () => {
+    storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+      workspaceId: 'workspace-one',
+    })
+
+    const { deferred, response } = await retryFile({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+    expect(deferred).toHaveLength(0)
+  })
+
+  it('rejects an empty file id', async () => {
+    const { deferred, response } = await retryFile({ itemId: '' })
+
+    expect(response.status).toBe(400)
+    expect(deferred).toHaveLength(0)
+  })
+})
+
+describe('DELETE /api/brain/files/$id', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('deletes the workspace file and its R2 object', async () => {
+    const files = makeFiles()
+    const item = storeBrainFile({ indexed: false, indexStatus: 'failed' })
+    files.objects.set(item.r2Key as string, new Uint8Array([1, 2, 3]))
+
+    const { response } = await deleteFile({ files })
+
+    expect(response.status).toBe(204)
+    expect(mockBrainItems.has(item.id)).toBe(false)
+    expect(files.objects.has(item.r2Key as string)).toBe(false)
+  })
+
+  it('does not delete a file from another workspace', async () => {
+    const files = makeFiles()
+    const item = storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+      workspaceId: 'workspace-one',
+    })
+    files.objects.set(item.r2Key as string, new Uint8Array([1, 2, 3]))
+
+    const { response } = await deleteFile({
+      files,
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+    expect(mockBrainItems.has(item.id)).toBe(true)
+    expect(files.objects.has(item.r2Key as string)).toBe(true)
+  })
+
+  it('rejects an empty file id', async () => {
+    const { response } = await deleteFile({ itemId: '' })
+
+    expect(response.status).toBe(400)
+  })
+})
+
+describe('GET /api/brain/files/$id/content', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('streams file content from R2 with safe response headers', async () => {
+    const item = storeBrainFile({ indexed: true })
+
+    const { get, response } = await getFileContent()
+
+    expect(response.status).toBe(200)
+    expect(get).toHaveBeenCalledWith(item.r2Key)
+    expect(response.headers.get('Content-Type')).toBe(
+      'text/plain; charset=utf-8',
+    )
+    expect(response.headers.get('Content-Disposition')).toBe('inline')
+    expect(response.headers.get('ETag')).toBe('"brain-file-etag"')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(await response.text()).toBe('Garden notes')
+  })
+
+  it('does not trust uploader-controlled R2 content metadata', async () => {
+    storeBrainFile({ indexed: true })
+
+    const { response } = await getFileContent({
+      storedContentType: 'text/html; charset=utf-8',
+    })
+
+    expect(response.headers.get('Content-Type')).toBe(
+      'text/plain; charset=utf-8',
+    )
+    expect(response.headers.get('Content-Disposition')).toBe('inline')
+  })
+
+  it('forces office documents to download', async () => {
+    storeBrainFile({ indexed: true, label: 'quarterly-report.docx' })
+
+    const { response } = await getFileContent()
+
+    expect(response.headers.get('Content-Type')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    expect(response.headers.get('Content-Disposition')).toContain('attachment')
+  })
+
+  it('does not read content from another workspace', async () => {
+    storeBrainFile({
+      indexed: true,
+      workspaceId: 'workspace-one',
+    })
+
+    const { get, response } = await getFileContent({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('returns not found when the R2 object is missing', async () => {
+    storeBrainFile({ indexed: true })
+
+    const { response } = await getFileContent({
+      objectBody: null,
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('rejects an empty file id before reading R2', async () => {
+    const { get, response } = await getFileContent({ itemId: '' })
+
+    expect(response.status).toBe(400)
+    expect(get).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/brain/files/$id/text', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('returns the extracted document text', async () => {
+    storeBrainFile({
+      indexed: true,
+      body: '# Quarterly report\n\nRevenue increased.',
+    })
+
+    const response = await getFileExtractedText()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/markdown')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(await response.text()).toBe(
+      '# Quarterly report\n\nRevenue increased.',
+    )
+  })
+
+  it('does not expose text from another workspace', async () => {
+    storeBrainFile({
+      indexed: true,
+      workspaceId: 'workspace-one',
+      body: 'Private workspace content',
+    })
+
+    const response = await getFileExtractedText({
+      workspaceId: 'workspace-two',
+    })
+
+    expect(response.status).toBe(404)
+  })
+
+  it('returns not found when extracted text is unavailable', async () => {
+    storeBrainFile({ indexed: false })
+
+    const response = await getFileExtractedText()
+
+    expect(response.status).toBe(404)
+  })
+})
+
+describe('GET /api/brain/files', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    mockBrainItems.clear()
+  })
+
+  it('lists only files from the active workspace with public fields', async () => {
+    const processing = storeBrainFile({
+      indexed: false,
+      itemId: 'item-processing',
+    })
+    const ready = storeBrainFile({
+      indexed: true,
+      itemId: 'item-ready',
+    })
+    const failed = storeBrainFile({
+      indexed: false,
+      indexStatus: 'failed',
+      itemId: 'item-failed',
+    })
+
+    storeBrainFile({
+      indexed: true,
+      itemId: 'item-private',
+      workspaceId: 'workspace-other',
+    })
+
+    const response = await getFiles()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+
+    const body = (await response.json()) as {
+      items: Array<{
+        id: string
+        name: string
+        status: string
+      }>
+    }
+
+    expect(body.items).toEqual(
+      expect.arrayContaining([
+        {
+          id: processing.id,
+          name: processing.label,
+          status: 'processing',
+        },
+        {
+          id: ready.id,
+          name: ready.label,
+          status: 'ready',
+        },
+        {
+          id: failed.id,
+          name: failed.label,
+          status: 'failed',
+        },
+      ]),
+    )
+    expect(body.items).toHaveLength(3)
+
+    for (const item of body.items) {
+      expect(Object.keys(item).sort()).toEqual(['id', 'name', 'status'])
+    }
+  })
 })

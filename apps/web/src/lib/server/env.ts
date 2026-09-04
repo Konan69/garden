@@ -9,6 +9,7 @@ export type AppEnv = {
   BETTER_AUTH_URL?: string
   AI: RequiredEnvBinding<'AI'>
   AI_GATEWAY_ID?: string
+  BRAIN_FILES: RequiredEnvBinding<'BRAIN_FILES'>
   FILES: RequiredEnvBinding<'FILES'>
   LOADER: RequiredEnvBinding<'LOADER'>
   BROWSER: RequiredEnvBinding<'BROWSER'>

@@ -8,6 +8,8 @@ export interface DeploymentTarget {
   readonly tailWorkerName: string
   readonly filesId: string
   readonly filesBucket: string
+  readonly brainFilesId: string
+  readonly brainFilesBucket: string
   readonly databaseId: string
   readonly databaseName: string
   readonly databaseUrlEnv: string

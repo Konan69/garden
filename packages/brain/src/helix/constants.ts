@@ -13,6 +13,8 @@ export const PROPS = {
   canonicalType: 'canonical_type',
   canonicalValue: 'canonical_value',
   indexed: 'indexed',
+  indexStatus: 'index_status',
+  indexError: 'index_error',
   origin: 'origin',
   body: 'body',
 } as const
@@ -36,6 +38,7 @@ export const EDGES = {
 export const QUERY = {
   index: 'brain.index',
   read: 'brain.read',
+  listFiles: 'brain.list_files',
   ensureIndexes: 'brain.ensure_indexes',
   indexStatus: 'brain.index_status',
   search: 'brain.search',
@@ -46,6 +49,8 @@ export const QUERY = {
   observeMention: 'brain.observe_mention',
   linkItems: 'brain.link_items',
   updateItemMetadata: 'brain.update_item_metadata',
+  updateIndexStatus: 'brain.update_index_status',
+  deleteFile: 'brain.delete_file',
   neighborhood: 'brain.neighborhood',
   countNodes: 'brain.count_nodes',
 } as const

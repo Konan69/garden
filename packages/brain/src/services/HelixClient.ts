@@ -87,8 +87,25 @@ const runOnce = (
       )
     }
     const text = yield* response.text
-    const parsed = parseJson(text)
-    return yield* Schema.decodeUnknownEffect(QueryResponseSchema)(parsed)
+    const parsed = yield* Effect.try({
+      try: () => parseJson(text),
+      catch: (cause) =>
+        new HelixError({
+          message: 'helix returned an invalid JSON response',
+          cause,
+          status: response.status,
+        }),
+    })
+    return yield* Schema.decodeUnknownEffect(QueryResponseSchema)(parsed).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HelixError({
+            message: 'helix returned an invalid response shape',
+            cause,
+            status: response.status,
+          }),
+      ),
+    )
   }).pipe(
     Effect.timeout(REQUEST_TIMEOUT),
     Effect.mapError((error) => {

@@ -13,6 +13,8 @@ export const deploymentTargets = {
     tailWorkerName: 'garden-staging-tail',
     filesId: 'files',
     filesBucket: 'garden-files-staging',
+    brainFilesId: 'brain-files',
+    brainFilesBucket: 'org-brain',
     databaseId: 'database',
     databaseName: 'garden-database-staging',
     databaseUrlEnv: 'DATABASE_URL',
@@ -44,6 +46,8 @@ export const deploymentTargets = {
     tailWorkerName: 'garden-preview-tail',
     filesId: 'files-preview',
     filesBucket: 'garden-files-preview',
+    brainFilesId: 'brain-files-preview',
+    brainFilesBucket: 'org-brain-preview',
     databaseId: 'database-preview',
     databaseName: 'garden-database-preview',
     // Explicit temporary compromise: preview shares the live Postgres origin.

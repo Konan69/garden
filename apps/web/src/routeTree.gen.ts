@@ -93,6 +93,7 @@ import { Route as ApiDocumentsIdDisplayRouteImport } from './routes/api/document
 import { Route as ApiConnectionsConnectorIdActivityRouteImport } from './routes/api/connections/$connectorId/activity'
 import { Route as ApiCommentsIdReactionsRouteImport } from './routes/api/comments/$id/reactions'
 import { Route as ApiChatThreadsIdRouteImport } from './routes/api/chat/threads/$id'
+import { Route as ApiBrainFilesIdRouteImport } from './routes/api/brain/files/$id'
 import { Route as ApiAutomationsIdTriggersRouteImport } from './routes/api/automations/$id/triggers'
 import { Route as ApiAutomationsIdTriggerRouteImport } from './routes/api/automations/$id/trigger'
 import { Route as ApiAutomationsIdRunsRouteImport } from './routes/api/automations/$id/runs'
@@ -105,6 +106,8 @@ import { Route as ApiChatThreadsIdToolApprovalRouteImport } from './routes/api/c
 import { Route as ApiChatThreadsIdPrimaryIssueRouteImport } from './routes/api/chat/threads/$id/primary-issue'
 import { Route as ApiChatThreadsIdPermissionRequestsRouteImport } from './routes/api/chat/threads/$id/permission-requests'
 import { Route as ApiChatThreadsIdDocumentsRouteImport } from './routes/api/chat/threads/$id/documents'
+import { Route as ApiBrainFilesIdTextRouteImport } from './routes/api/brain/files/$id/text'
+import { Route as ApiBrainFilesIdContentRouteImport } from './routes/api/brain/files/$id/content'
 import { Route as ApiAutomationsIdTriggersTriggerIdRouteImport } from './routes/api/automations/$id/triggers/$triggerId'
 import { Route as ApiConnectionsConnectorIdToolsNameGrantRouteImport } from './routes/api/connections/$connectorId/tools/$name/grant'
 
@@ -538,6 +541,11 @@ const ApiChatThreadsIdRoute = ApiChatThreadsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiChatThreadsRoute,
 } as any)
+const ApiBrainFilesIdRoute = ApiBrainFilesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiBrainFilesRoute,
+} as any)
 const ApiAutomationsIdTriggersRoute =
   ApiAutomationsIdTriggersRouteImport.update({
     id: '/triggers',
@@ -606,6 +614,16 @@ const ApiChatThreadsIdDocumentsRoute =
     path: '/documents',
     getParentRoute: () => ApiChatThreadsIdRoute,
   } as any)
+const ApiBrainFilesIdTextRoute = ApiBrainFilesIdTextRouteImport.update({
+  id: '/text',
+  path: '/text',
+  getParentRoute: () => ApiBrainFilesIdRoute,
+} as any)
+const ApiBrainFilesIdContentRoute = ApiBrainFilesIdContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => ApiBrainFilesIdRoute,
+} as any)
 const ApiAutomationsIdTriggersTriggerIdRoute =
   ApiAutomationsIdTriggersTriggerIdRouteImport.update({
     id: '/$triggerId',
@@ -649,7 +667,7 @@ export interface FileRoutesByFullPath {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/automations/$id': typeof ApiAutomationsIdRouteWithChildren
-  '/api/brain/files': typeof ApiBrainFilesRoute
+  '/api/brain/files': typeof ApiBrainFilesRouteWithChildren
   '/api/chat/threads': typeof ApiChatThreadsRouteWithChildren
   '/api/comments/$id': typeof ApiCommentsIdRouteWithChildren
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
@@ -681,6 +699,7 @@ export interface FileRoutesByFullPath {
   '/api/automations/$id/runs': typeof ApiAutomationsIdRunsRoute
   '/api/automations/$id/trigger': typeof ApiAutomationsIdTriggerRoute
   '/api/automations/$id/triggers': typeof ApiAutomationsIdTriggersRouteWithChildren
+  '/api/brain/files/$id': typeof ApiBrainFilesIdRouteWithChildren
   '/api/chat/threads/$id': typeof ApiChatThreadsIdRouteWithChildren
   '/api/comments/$id/reactions': typeof ApiCommentsIdReactionsRoute
   '/api/connections/$connectorId/activity': typeof ApiConnectionsConnectorIdActivityRoute
@@ -709,6 +728,8 @@ export interface FileRoutesByFullPath {
   '/api/workspaces/$id/invitations': typeof ApiWorkspacesIdInvitationsRouteWithChildren
   '/api/workspaces/$id/members': typeof ApiWorkspacesIdMembersRouteWithChildren
   '/api/automations/$id/triggers/$triggerId': typeof ApiAutomationsIdTriggersTriggerIdRoute
+  '/api/brain/files/$id/content': typeof ApiBrainFilesIdContentRoute
+  '/api/brain/files/$id/text': typeof ApiBrainFilesIdTextRoute
   '/api/chat/threads/$id/documents': typeof ApiChatThreadsIdDocumentsRoute
   '/api/chat/threads/$id/permission-requests': typeof ApiChatThreadsIdPermissionRequestsRoute
   '/api/chat/threads/$id/primary-issue': typeof ApiChatThreadsIdPrimaryIssueRoute
@@ -748,7 +769,7 @@ export interface FileRoutesByTo {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/automations/$id': typeof ApiAutomationsIdRouteWithChildren
-  '/api/brain/files': typeof ApiBrainFilesRoute
+  '/api/brain/files': typeof ApiBrainFilesRouteWithChildren
   '/api/chat/threads': typeof ApiChatThreadsRouteWithChildren
   '/api/comments/$id': typeof ApiCommentsIdRouteWithChildren
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
@@ -780,6 +801,7 @@ export interface FileRoutesByTo {
   '/api/automations/$id/runs': typeof ApiAutomationsIdRunsRoute
   '/api/automations/$id/trigger': typeof ApiAutomationsIdTriggerRoute
   '/api/automations/$id/triggers': typeof ApiAutomationsIdTriggersRouteWithChildren
+  '/api/brain/files/$id': typeof ApiBrainFilesIdRouteWithChildren
   '/api/chat/threads/$id': typeof ApiChatThreadsIdRouteWithChildren
   '/api/comments/$id/reactions': typeof ApiCommentsIdReactionsRoute
   '/api/connections/$connectorId/activity': typeof ApiConnectionsConnectorIdActivityRoute
@@ -808,6 +830,8 @@ export interface FileRoutesByTo {
   '/api/workspaces/$id/invitations': typeof ApiWorkspacesIdInvitationsRouteWithChildren
   '/api/workspaces/$id/members': typeof ApiWorkspacesIdMembersRouteWithChildren
   '/api/automations/$id/triggers/$triggerId': typeof ApiAutomationsIdTriggersTriggerIdRoute
+  '/api/brain/files/$id/content': typeof ApiBrainFilesIdContentRoute
+  '/api/brain/files/$id/text': typeof ApiBrainFilesIdTextRoute
   '/api/chat/threads/$id/documents': typeof ApiChatThreadsIdDocumentsRoute
   '/api/chat/threads/$id/permission-requests': typeof ApiChatThreadsIdPermissionRequestsRoute
   '/api/chat/threads/$id/primary-issue': typeof ApiChatThreadsIdPrimaryIssueRoute
@@ -849,7 +873,7 @@ export interface FileRoutesById {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/automations/$id': typeof ApiAutomationsIdRouteWithChildren
-  '/api/brain/files': typeof ApiBrainFilesRoute
+  '/api/brain/files': typeof ApiBrainFilesRouteWithChildren
   '/api/chat/threads': typeof ApiChatThreadsRouteWithChildren
   '/api/comments/$id': typeof ApiCommentsIdRouteWithChildren
   '/api/connections/$connectorId': typeof ApiConnectionsConnectorIdRouteWithChildren
@@ -881,6 +905,7 @@ export interface FileRoutesById {
   '/api/automations/$id/runs': typeof ApiAutomationsIdRunsRoute
   '/api/automations/$id/trigger': typeof ApiAutomationsIdTriggerRoute
   '/api/automations/$id/triggers': typeof ApiAutomationsIdTriggersRouteWithChildren
+  '/api/brain/files/$id': typeof ApiBrainFilesIdRouteWithChildren
   '/api/chat/threads/$id': typeof ApiChatThreadsIdRouteWithChildren
   '/api/comments/$id/reactions': typeof ApiCommentsIdReactionsRoute
   '/api/connections/$connectorId/activity': typeof ApiConnectionsConnectorIdActivityRoute
@@ -909,6 +934,8 @@ export interface FileRoutesById {
   '/api/workspaces/$id/invitations': typeof ApiWorkspacesIdInvitationsRouteWithChildren
   '/api/workspaces/$id/members': typeof ApiWorkspacesIdMembersRouteWithChildren
   '/api/automations/$id/triggers/$triggerId': typeof ApiAutomationsIdTriggersTriggerIdRoute
+  '/api/brain/files/$id/content': typeof ApiBrainFilesIdContentRoute
+  '/api/brain/files/$id/text': typeof ApiBrainFilesIdTextRoute
   '/api/chat/threads/$id/documents': typeof ApiChatThreadsIdDocumentsRoute
   '/api/chat/threads/$id/permission-requests': typeof ApiChatThreadsIdPermissionRequestsRoute
   '/api/chat/threads/$id/primary-issue': typeof ApiChatThreadsIdPrimaryIssueRoute
@@ -982,6 +1009,7 @@ export interface FileRouteTypes {
     | '/api/automations/$id/runs'
     | '/api/automations/$id/trigger'
     | '/api/automations/$id/triggers'
+    | '/api/brain/files/$id'
     | '/api/chat/threads/$id'
     | '/api/comments/$id/reactions'
     | '/api/connections/$connectorId/activity'
@@ -1010,6 +1038,8 @@ export interface FileRouteTypes {
     | '/api/workspaces/$id/invitations'
     | '/api/workspaces/$id/members'
     | '/api/automations/$id/triggers/$triggerId'
+    | '/api/brain/files/$id/content'
+    | '/api/brain/files/$id/text'
     | '/api/chat/threads/$id/documents'
     | '/api/chat/threads/$id/permission-requests'
     | '/api/chat/threads/$id/primary-issue'
@@ -1081,6 +1111,7 @@ export interface FileRouteTypes {
     | '/api/automations/$id/runs'
     | '/api/automations/$id/trigger'
     | '/api/automations/$id/triggers'
+    | '/api/brain/files/$id'
     | '/api/chat/threads/$id'
     | '/api/comments/$id/reactions'
     | '/api/connections/$connectorId/activity'
@@ -1109,6 +1140,8 @@ export interface FileRouteTypes {
     | '/api/workspaces/$id/invitations'
     | '/api/workspaces/$id/members'
     | '/api/automations/$id/triggers/$triggerId'
+    | '/api/brain/files/$id/content'
+    | '/api/brain/files/$id/text'
     | '/api/chat/threads/$id/documents'
     | '/api/chat/threads/$id/permission-requests'
     | '/api/chat/threads/$id/primary-issue'
@@ -1181,6 +1214,7 @@ export interface FileRouteTypes {
     | '/api/automations/$id/runs'
     | '/api/automations/$id/trigger'
     | '/api/automations/$id/triggers'
+    | '/api/brain/files/$id'
     | '/api/chat/threads/$id'
     | '/api/comments/$id/reactions'
     | '/api/connections/$connectorId/activity'
@@ -1209,6 +1243,8 @@ export interface FileRouteTypes {
     | '/api/workspaces/$id/invitations'
     | '/api/workspaces/$id/members'
     | '/api/automations/$id/triggers/$triggerId'
+    | '/api/brain/files/$id/content'
+    | '/api/brain/files/$id/text'
     | '/api/chat/threads/$id/documents'
     | '/api/chat/threads/$id/permission-requests'
     | '/api/chat/threads/$id/primary-issue'
@@ -1245,7 +1281,7 @@ export interface RootRouteChildren {
   ApiWorkspacesRoute: typeof ApiWorkspacesRouteWithChildren
   ApiAttachmentsIdRoute: typeof ApiAttachmentsIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ApiBrainFilesRoute: typeof ApiBrainFilesRoute
+  ApiBrainFilesRoute: typeof ApiBrainFilesRouteWithChildren
   ApiChatThreadsRoute: typeof ApiChatThreadsRouteWithChildren
   ApiCommentsIdRoute: typeof ApiCommentsIdRouteWithChildren
   ApiDevIssueRunPlanRoute: typeof ApiDevIssueRunPlanRoute
@@ -1859,6 +1895,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatThreadsIdRouteImport
       parentRoute: typeof ApiChatThreadsRoute
     }
+    '/api/brain/files/$id': {
+      id: '/api/brain/files/$id'
+      path: '/$id'
+      fullPath: '/api/brain/files/$id'
+      preLoaderRoute: typeof ApiBrainFilesIdRouteImport
+      parentRoute: typeof ApiBrainFilesRoute
+    }
     '/api/automations/$id/triggers': {
       id: '/api/automations/$id/triggers'
       path: '/triggers'
@@ -1942,6 +1985,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/chat/threads/$id/documents'
       preLoaderRoute: typeof ApiChatThreadsIdDocumentsRouteImport
       parentRoute: typeof ApiChatThreadsIdRoute
+    }
+    '/api/brain/files/$id/text': {
+      id: '/api/brain/files/$id/text'
+      path: '/text'
+      fullPath: '/api/brain/files/$id/text'
+      preLoaderRoute: typeof ApiBrainFilesIdTextRouteImport
+      parentRoute: typeof ApiBrainFilesIdRoute
+    }
+    '/api/brain/files/$id/content': {
+      id: '/api/brain/files/$id/content'
+      path: '/content'
+      fullPath: '/api/brain/files/$id/content'
+      preLoaderRoute: typeof ApiBrainFilesIdContentRouteImport
+      parentRoute: typeof ApiBrainFilesIdRoute
     }
     '/api/automations/$id/triggers/$triggerId': {
       id: '/api/automations/$id/triggers/$triggerId'
@@ -2224,6 +2281,32 @@ const ApiWorkspacesRouteWithChildren = ApiWorkspacesRoute._addFileChildren(
   ApiWorkspacesRouteChildren,
 )
 
+interface ApiBrainFilesIdRouteChildren {
+  ApiBrainFilesIdContentRoute: typeof ApiBrainFilesIdContentRoute
+  ApiBrainFilesIdTextRoute: typeof ApiBrainFilesIdTextRoute
+}
+
+const ApiBrainFilesIdRouteChildren: ApiBrainFilesIdRouteChildren = {
+  ApiBrainFilesIdContentRoute: ApiBrainFilesIdContentRoute,
+  ApiBrainFilesIdTextRoute: ApiBrainFilesIdTextRoute,
+}
+
+const ApiBrainFilesIdRouteWithChildren = ApiBrainFilesIdRoute._addFileChildren(
+  ApiBrainFilesIdRouteChildren,
+)
+
+interface ApiBrainFilesRouteChildren {
+  ApiBrainFilesIdRoute: typeof ApiBrainFilesIdRouteWithChildren
+}
+
+const ApiBrainFilesRouteChildren: ApiBrainFilesRouteChildren = {
+  ApiBrainFilesIdRoute: ApiBrainFilesIdRouteWithChildren,
+}
+
+const ApiBrainFilesRouteWithChildren = ApiBrainFilesRoute._addFileChildren(
+  ApiBrainFilesRouteChildren,
+)
+
 interface ApiChatThreadsIdRouteChildren {
   ApiChatThreadsIdDocumentsRoute: typeof ApiChatThreadsIdDocumentsRoute
   ApiChatThreadsIdPermissionRequestsRoute: typeof ApiChatThreadsIdPermissionRequestsRoute
@@ -2292,7 +2375,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWorkspacesRoute: ApiWorkspacesRouteWithChildren,
   ApiAttachmentsIdRoute: ApiAttachmentsIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
-  ApiBrainFilesRoute: ApiBrainFilesRoute,
+  ApiBrainFilesRoute: ApiBrainFilesRouteWithChildren,
   ApiChatThreadsRoute: ApiChatThreadsRouteWithChildren,
   ApiCommentsIdRoute: ApiCommentsIdRouteWithChildren,
   ApiDevIssueRunPlanRoute: ApiDevIssueRunPlanRoute,

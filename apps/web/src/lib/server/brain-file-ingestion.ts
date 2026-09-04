@@ -54,7 +54,7 @@ const messageFromUnknown = (cause: unknown): string =>
  * orchestration remains one Effect service and upload failures retain cleanup.
  */
 export const makeBrainFileIngestionLayer = (
-  env: Pick<AppEnv, 'FILES' | 'HYPERDRIVE'>,
+  env: Pick<AppEnv, 'BRAIN_FILES' | 'HYPERDRIVE'>,
 ): Layer.Layer<BrainFileIngestion, never, Brain | BrainAuditClient> =>
   Layer.effect(
     BrainFileIngestion,
@@ -80,7 +80,7 @@ export const makeBrainFileIngestionLayer = (
         reason: 'duplicate' | 'upload_failed'
       }) {
         yield* Effect.tryPromise({
-          try: () => env.FILES.delete(input.r2Key),
+          try: () => env.BRAIN_FILES.delete(input.r2Key),
           catch: (cause) =>
             ingestionFailure('delete staged brain upload', cause),
         }).pipe(
@@ -127,7 +127,7 @@ export const makeBrainFileIngestionLayer = (
         const at = yield* DateTime.now
         yield* Effect.tryPromise({
           try: () =>
-            env.FILES.put(input.r2Key, input.file.stream(), {
+            env.BRAIN_FILES.put(input.r2Key, input.file.stream(), {
               httpMetadata: {
                 contentType: input.file.type || 'application/octet-stream',
                 contentDisposition: buildContentDisposition(
@@ -149,6 +149,7 @@ export const makeBrainFileIngestionLayer = (
               type: 'file',
               value: `brain:${input.workspaceId}:${normalizeDownloadFilename(input.file.name)}`,
             },
+            indexStatus: 'processing',
             origin: {
               actor: { _tag: 'Human', userId: input.ownerUserId },
               at,
@@ -166,7 +167,7 @@ export const makeBrainFileIngestionLayer = (
             ),
           )
 
-        if (added.r2Key !== undefined && added.r2Key !== input.r2Key) {
+        if (added.r2Key !== input.r2Key) {
           yield* discardStagedUpload({
             r2Key: input.r2Key,
             reason: 'duplicate',
@@ -175,33 +176,67 @@ export const makeBrainFileIngestionLayer = (
         return added
       })
 
+      /** Records a terminal indexing failure without rejecting background work. */
+      const persistIndexFailure = (
+        input: { itemId: string; workspaceId: string },
+        failure: unknown,
+      ): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          brainIngestionLogger.error('brain file deferred indexing failed', {
+            itemId: input.itemId,
+            workspaceId: input.workspaceId,
+            ...errorFields(failure),
+          })
+
+          yield* brain
+            .updateIndexStatus({
+              itemId: ItemId.make(input.itemId),
+              tenantId: WorkspaceId.make(input.workspaceId),
+              status: 'failed',
+              error: messageFromUnknown(failure),
+            })
+            .pipe(
+              Effect.asVoid,
+              Effect.catch((statusFailure) =>
+                Effect.sync(() => {
+                  brainIngestionLogger.error(
+                    'brain file failure status update failed',
+                    {
+                      itemId: input.itemId,
+                      workspaceId: input.workspaceId,
+                      ...errorFields(statusFailure),
+                    },
+                  )
+                }),
+              ),
+            )
+        })
+
       const indexAndAudit = Effect.fn('BrainFileIngestion.indexAndAudit')(
         function* (input: {
           itemId: string
           ownerUserId: string
           workspaceId: string
         }) {
-          const indexed = yield* Effect.match(
+          const indexed = yield* Effect.matchEffect(
             Effect.gen(function* () {
+              yield* brain.updateIndexStatus({
+                itemId: ItemId.make(input.itemId),
+                tenantId: WorkspaceId.make(input.workspaceId),
+                status: 'processing',
+              })
+
               yield* brain.ensureIndexes()
+
               return yield* brain.index(
                 ItemId.make(input.itemId),
                 WorkspaceId.make(input.workspaceId),
               )
             }),
             {
-              onFailure: (failure) => {
-                brainIngestionLogger.error(
-                  'brain file deferred indexing failed',
-                  {
-                    itemId: input.itemId,
-                    workspaceId: input.workspaceId,
-                    ...errorFields(failure),
-                  },
-                )
-                return null
-              },
-              onSuccess: (item) => item,
+              onFailure: (failure) =>
+                persistIndexFailure(input, failure).pipe(Effect.as(null)),
+              onSuccess: (item) => Effect.succeed(item),
             },
           )
           if (indexed === null) return

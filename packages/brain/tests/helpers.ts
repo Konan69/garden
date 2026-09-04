@@ -10,10 +10,8 @@ export const TestConfig = Layer.succeed(HelixClientConfig)({
   baseUrl: 'http://localhost:6968',
 })
 
+/** Provides Node file access and the local Helix test configuration to a layer. */
 export const withTestConfig = <R, E>(
   layer: Layer.Layer<R, E, FileSystem | HelixClientConfigShape>,
 ): Layer.Layer<R, E, never> =>
-  Layer.provide(
-    layer,
-    Layer.merge(NodeFileSystem.layer, TestConfig),
-  )
+  Layer.provide(layer, Layer.merge(NodeFileSystem.layer, TestConfig))

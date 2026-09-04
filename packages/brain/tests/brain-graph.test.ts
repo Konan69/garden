@@ -1,5 +1,5 @@
 import type { QueryRequest } from '@helix-db/helix-db'
-import { Effect } from 'effect'
+import { DateTime, Effect } from 'effect'
 import { expect, it } from '@effect/vitest'
 import { EDGES } from '../src/helix/constants.ts'
 import { ItemId, Kind, WorkspaceId } from '../src/domain/items.ts'
@@ -151,6 +151,94 @@ it.effect(
     }),
 )
 
+it.effect('records a terminal file indexing failure', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const failedRow = {
+      ...itemRow(1, 'Quarterly report', 'file'),
+      index_status: 'failed',
+      index_error: 'planner failed',
+    }
+    const brain = yield* testBrain(
+      (request) =>
+        request.toJsonString().includes('brain.update_index_status')
+          ? { updated: [failedRow] }
+          : { item: [failedRow] },
+      calls,
+    )
+
+    const updated = yield* brain.updateIndexStatus({
+      tenantId,
+      itemId: ItemId.make('1'),
+      status: 'failed',
+      error: 'planner failed',
+    })
+
+    expect(updated.indexed).toBe(false)
+    expect(updated.indexStatus).toBe('failed')
+    expect(updated.indexError).toBe('planner failed')
+    expect(calls).toHaveLength(2)
+    expect(calls[0]?.options?.awaitDurability).toBe(true)
+
+    const request = calls[0]?.request.toJsonString() ?? ''
+    expect(request).toContain('"query_name":"brain.update_index_status"')
+    expect(request).toContain('"name":"index_status"')
+    expect(request).toContain('"string":"failed"')
+    expect(request).toContain('"name":"index_error"')
+    expect(request).toContain('"string":"planner failed"')
+    expect(request).toContain('"name":"indexed"')
+    expect(request).toContain('"bool":false')
+  }),
+)
+
+it.effect('deletes a workspace file and its derived sections', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const fileRow = {
+      ...itemRow(1, 'Quarterly report', 'file'),
+      r2_key: 'brain/workspaces/ws-graph/quarterly-report.pdf',
+    }
+    const brain = yield* testBrain(
+      (request) =>
+        request.toJsonString().includes('brain.delete_file')
+          ? { sections: [], file: [fileRow] }
+          : { file: [fileRow] },
+      calls,
+    )
+
+    const deleted = yield* brain.deleteFile(ItemId.make('1'), tenantId)
+
+    expect(deleted?.id).toBe(ItemId.make('1'))
+    expect(deleted?.r2Key).toBe(
+      'brain/workspaces/ws-graph/quarterly-report.pdf',
+    )
+    expect(calls).toHaveLength(3)
+
+    const readRequest = calls[0]?.request.toJsonString() ?? ''
+    expect(readRequest).toContain('"query_name":"brain.read"')
+    expect(readRequest).toContain('"property":"$label"')
+    expect(readRequest).toContain('"string":"file"')
+    expect(readRequest).toContain('"property":"workspace_id"')
+    expect(readRequest).toContain('"string":"ws-graph"')
+
+    const sectionsRequest = calls[1]?.request.toJsonString() ?? ''
+    expect(calls[1]?.options?.awaitDurability).toBe(true)
+    expect(sectionsRequest).toContain('"query_name":"brain.delete_file"')
+    expect(sectionsRequest).toContain('"label":"HAS_SECTION"')
+    expect(sectionsRequest).toContain('"drop"')
+    expect(sectionsRequest).toContain('"property":"workspace_id"')
+    expect(sectionsRequest).toContain('"string":"ws-graph"')
+
+    const fileRequest = calls[2]?.request.toJsonString() ?? ''
+    expect(calls[2]?.options?.awaitDurability).toBe(true)
+    expect(fileRequest).toContain('"query_name":"brain.delete_file"')
+    expect(fileRequest).toContain('"property":"$label"')
+    expect(fileRequest).toContain('"string":"file"')
+    expect(fileRequest).toContain('"drop"')
+    expect(fileRequest).not.toContain('"label":"HAS_SECTION"')
+  }),
+)
+
 it.effect(
   'links existing items with fixed and agent-invented edge labels',
   () =>
@@ -281,4 +369,139 @@ it.effect(
       expect(request).toContain('"literal":100')
       expect(request).not.toContain('"repeat"')
     }),
+)
+
+it.effect('lists a bounded file set without leaking another workspace', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const otherTenantId = WorkspaceId.make('ws-other')
+
+    const brain = yield* testBrain(
+      () => ({
+        files: [
+          itemRow(1, 'Alpha.txt', 'file'),
+          {
+            ...itemRow(2, 'Private.txt', 'file'),
+            workspace_id: otherTenantId,
+          },
+          itemRow(3, 'Release notes.md', 'file'),
+        ],
+      }),
+      calls,
+    )
+
+    const files = yield* brain.listFiles({
+      tenantId,
+      limit: 25,
+    })
+
+    expect(files.map((file) => file.label)).toEqual([
+      'Alpha.txt',
+      'Release notes.md',
+    ])
+
+    expect(calls).toHaveLength(1)
+
+    const request = calls[0]?.request.toJsonString() ?? ''
+
+    expect(request).toContain('"query_name":"brain.list_files"')
+    expect(request).toContain('"property":"$label"')
+    expect(request).toContain('"string":"file"')
+    expect(request).toContain('"workspace_id"')
+    expect(request).toContain('"limit"')
+  }),
+)
+
+it.effect('scopes direct reads in the Helix traversal', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const brain = yield* testBrain(
+      () => ({ item: [itemRow(1, 'Note')] }),
+      calls,
+    )
+
+    const item = yield* brain.read(ItemId.make('1'), tenantId)
+
+    expect(item?.id).toBe(ItemId.make('1'))
+    const request = calls[0]?.request.toJsonString() ?? ''
+    expect(request).toContain('"property":"workspace_id"')
+    expect(request).toContain('"string":"ws-graph"')
+  }),
+)
+
+it.effect('waits for durable item creation before returning', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    let responseIndex = 0
+    const brain = yield* testBrain(
+      () =>
+        responseIndex++ === 0
+          ? { created: [itemRow(1, 'Durable note')] }
+          : { item: [itemRow(1, 'Durable note')] },
+      calls,
+    )
+
+    yield* brain.addItem({
+      tenantId,
+      kind: Kind.make('note'),
+      label: 'Durable note',
+      origin: {
+        actor: { _tag: 'Human', userId: 'test-user' },
+        at: DateTime.makeUnsafe(new Date('2026-01-01T00:00:00.000Z')),
+      },
+    })
+
+    expect(calls[0]?.options?.awaitDurability).toBe(true)
+  }),
+)
+
+it.effect('fails malformed stored mention spans in the error channel', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const brain = yield* testBrain(
+      () => ({
+        root_item: [itemRow(1, 'Root')],
+        hop_1_items: [],
+        hop_1_edges: [
+          {
+            id: 90,
+            from: 1,
+            to: 1,
+            edge: EDGES.mentions,
+            workspace_id: tenantId,
+            origin: storedOrigin,
+            mention_text: 'Alice',
+            mention_span_start: 10,
+            mention_span_end: 5,
+          },
+        ],
+      }),
+      calls,
+    )
+
+    const exit = yield* Effect.exit(
+      brain.neighborhood({ tenantId, itemId: ItemId.make('1') }),
+    )
+
+    expect(exit._tag).toBe('Failure')
+  }),
+)
+
+it.effect('fails when the embedding service omits a requested vector', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const brain = yield* testBrain(() => ({}), calls)
+
+    const exit = yield* Effect.exit(
+      brain.addText({
+        tenantId,
+        label: 'Missing vector',
+        body: 'Body',
+        actor: { _tag: 'Human', userId: 'test-user' },
+      }),
+    )
+
+    expect(exit._tag).toBe('Failure')
+    expect(calls).toHaveLength(0)
+  }),
 )

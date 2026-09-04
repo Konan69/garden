@@ -1,4 +1,4 @@
-import { Effect, Layer, Ref } from 'effect'
+import { Effect, Layer } from 'effect'
 import { env, pipeline } from '@xenova/transformers'
 import type { FeatureExtractionPipeline } from '@xenova/transformers'
 import { EMBEDDING_DIM, Embeddings } from './Embeddings.ts'
@@ -17,18 +17,33 @@ const buildPipeline = () =>
       new EmbedError({ message: 'failed to load embedding model', cause }),
   })
 
-const embedWithPipeline = (instance: FeatureExtractionPipeline, texts: readonly string[]) =>
+const embedWithPipeline = (
+  instance: FeatureExtractionPipeline,
+  texts: readonly string[],
+) =>
   Effect.tryPromise({
     try: async () => {
       const tensor = await instance(texts as string[], {
         pooling: 'mean',
         normalize: true,
       })
-      const data = tensor.data as Float32Array
+      const data = tensor.data
       const dim = EMBEDDING_DIM
+      const expectedLength = texts.length * dim
+      if (!(data instanceof Float32Array) || data.length !== expectedLength) {
+        throw new Error(
+          `embedding tensor has ${data.length} values; expected ${expectedLength}`,
+        )
+      }
       const rows: number[][] = []
       for (let i = 0; i < texts.length; i++) {
-        rows.push(Array.from(data.slice(i * dim, (i + 1) * dim)))
+        const row = Array.from(data.slice(i * dim, (i + 1) * dim))
+        if (row.some((value) => !Number.isFinite(value))) {
+          throw new Error(
+            `embedding tensor row ${i} contains a non-finite value`,
+          )
+        }
+        rows.push(row)
       }
       return rows
     },
@@ -39,12 +54,7 @@ const embedWithPipeline = (instance: FeatureExtractionPipeline, texts: readonly 
 export const LocalEmbeddingsLive = Layer.effect(
   Embeddings,
   Effect.gen(function* () {
-    const cache = yield* Ref.make<FeatureExtractionPipeline | null>(null)
-    const getPipeline = Effect.flatMap(Ref.get(cache), (instance) =>
-      instance === null
-        ? buildPipeline().pipe(Effect.tap((built) => Ref.set(cache, built)))
-        : Effect.succeed(instance),
-    )
+    const getPipeline = yield* Effect.cached(buildPipeline())
     return Embeddings.of({
       dim: EMBEDDING_DIM,
       embed: (texts) =>

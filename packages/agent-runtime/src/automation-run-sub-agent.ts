@@ -85,25 +85,26 @@ import {
 
 type AgentRuntimeEnv = Cloudflare.Env &
   AgentModelEnv & {
-  BETTER_AUTH_SECRET: string
-  BETTER_AUTH_URL: string
-  HYPERDRIVE: Hyperdrive
-  DISCORD_BOT_TOKEN?: string
-  EXA_API_KEY?: string
-  AI: Ai
-  AI_GATEWAY_ID?: string
-  ENVIRONMENT?: string
-  VITE_PUBLIC_POSTHOG_HOST?: string
-  VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?: string
-  FILES: R2Bucket
-  LOADER: WorkerLoader
-  BROWSER: Fetcher
-  Sandbox: DurableObjectNamespace<SandboxDO>
-  MCP_SESSION: DurableObjectNamespace
-  RUN_WORKFLOW: RunWorkflowBinding
-  HELIX_URL?: string
-  HELIX_API_KEY?: string
-}
+    BETTER_AUTH_SECRET: string
+    BETTER_AUTH_URL: string
+    HYPERDRIVE: Hyperdrive
+    DISCORD_BOT_TOKEN?: string
+    EXA_API_KEY?: string
+    AI: Ai
+    AI_GATEWAY_ID?: string
+    ENVIRONMENT?: string
+    VITE_PUBLIC_POSTHOG_HOST?: string
+    VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?: string
+    BRAIN_FILES: R2Bucket
+    FILES: R2Bucket
+    LOADER: WorkerLoader
+    BROWSER: Fetcher
+    Sandbox: DurableObjectNamespace<SandboxDO>
+    MCP_SESSION: DurableObjectNamespace
+    RUN_WORKFLOW: RunWorkflowBinding
+    HELIX_URL?: string
+    HELIX_API_KEY?: string
+  }
 
 type TurnMode = 'start' | 'resume'
 
@@ -438,14 +439,22 @@ export class AutomationRunSubAgent extends Think<AgentRuntimeEnv> {
             : { HELIX_API_KEY: this.env.HELIX_API_KEY }),
         },
         ai: this.env.AI,
-        files: this.env.FILES,
+        files: this.env.BRAIN_FILES,
         getContext: () => {
           const ctx = this.currentLogContext
           if (ctx === null) return null
+          const { workspaceId, agentId, runId } = ctx
+          if (
+            typeof workspaceId !== 'string' ||
+            typeof agentId !== 'string' ||
+            typeof runId !== 'string'
+          ) {
+            return null
+          }
           return {
-            workspaceId: String(ctx.workspaceId),
-            agentId: String(ctx.agentId),
-            runId: String(ctx.runId),
+            workspaceId,
+            agentId,
+            runId,
           }
         },
       }),

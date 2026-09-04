@@ -12,6 +12,7 @@ import {
   g,
   readBatch,
   writeBatch,
+  Order,
 } from '@helix-db/helix-db'
 import type { PropertyValueInput, Traversal } from '@helix-db/helix-db'
 import {
@@ -19,6 +20,7 @@ import {
   BrainEdge,
   BrainItem,
   BrainNeighborhood,
+  BrainIndexStatus,
   ItemId,
   Kind,
   MentionObservation,
@@ -64,6 +66,17 @@ export type BrainShape = {
     summary?: string
     actor: Actor
   }) => Effect.Effect<BrainItem, HelixError | WriteConflict | EmbedError>
+
+  readonly updateIndexStatus: (input: {
+    itemId: ItemId
+    tenantId: WorkspaceId
+    status: BrainIndexStatus
+    error?: string
+  }) => Effect.Effect<BrainItem, HelixError | WriteConflict>
+  readonly deleteFile: (
+    itemId: ItemId,
+    tenantId: WorkspaceId,
+  ) => Effect.Effect<BrainItem | null, HelixError | WriteConflict>
   /**
    * Updates agent-authored structure without changing source content. Static
    * ingestion previously had no way to replace the mechanical `file` kind and
@@ -87,6 +100,13 @@ export type BrainShape = {
     id: ItemId,
     tenantId: WorkspaceId,
   ) => Effect.Effect<BrainItem | null, HelixError | WriteConflict>
+  /**
+   * Reads only a file storage node inside the specified workspace.
+   */
+  readonly readFileItem: (
+    id: ItemId,
+    tenantId: WorkspaceId,
+  ) => Effect.Effect<BrainItem | null, HelixError | WriteConflict>
   readonly search: (input: {
     tenantId: WorkspaceId
     query: string
@@ -95,6 +115,10 @@ export type BrainShape = {
     readonly SearchHit[],
     HelixError | WriteConflict | EmbedError
   >
+  readonly listFiles: (input: {
+    tenantId: WorkspaceId
+    limit?: number
+  }) => Effect.Effect<readonly BrainItem[], HelixError | WriteConflict>
   readonly linkSections: (
     fileId: ItemId,
     sectionIds: readonly ItemId[],
@@ -170,6 +194,8 @@ const ItemRow = Schema.Struct({
   canonical_type: Schema.optional(Schema.String),
   canonical_value: Schema.optional(Schema.String),
   indexed: Schema.optional(Schema.Boolean),
+  index_status: Schema.optional(BrainIndexStatus),
+  index_error: Schema.optional(Schema.String),
   origin: Schema.String,
   body: Schema.optional(Schema.String),
 })
@@ -207,20 +233,21 @@ const rows = (result: Record<string, unknown>, name: string): readonly Row[] =>
 
 const nodeId = (itemId: ItemId): number => Number(itemId)
 
-const idOfRow = (row: Row): ItemId => {
+const decodeItemId = (row: Row): Effect.Effect<ItemId, HelixError> => {
   const raw = row.$id ?? row.id
   if (typeof raw !== 'number' && typeof raw !== 'string') {
-    throw new Error('item row is missing an id')
+    return Effect.fail(new HelixError({ message: 'item row is missing an id' }))
   }
-  return ItemId.make(String(raw))
+  return Effect.succeed(ItemId.make(String(raw)))
 }
 
-const decodeOrigin = (raw: unknown): Origin => {
-  if (typeof raw !== 'string') throw new Error('item row is missing origin')
-  return Schema.decodeSync(
-    OriginJsonCodec as unknown as Schema.Decoder<Origin>,
-  )(JSON.parse(raw))
-}
+const decodeItemOrigin = (raw: unknown): Effect.Effect<Origin, HelixError> =>
+  Schema.decodeUnknownEffect(OriginFromJsonString)(raw).pipe(
+    Effect.mapError(
+      (cause) =>
+        new HelixError({ message: 'invalid brain item origin', cause }),
+    ),
+  )
 
 const originJson = (origin: Origin): string =>
   JSON.stringify(
@@ -229,30 +256,36 @@ const originJson = (origin: Origin): string =>
     )(Schema.decodeUnknownSync(Origin)(origin)),
   )
 
-const rowToItem = (row: Row): BrainItem => {
-  const item = Schema.decodeUnknownSync(ItemRow)(row)
-  return {
-    id: idOfRow(row),
-    tenantId: WorkspaceId.make(item.workspace_id),
-    kind: Kind.make(item.kind),
-    label: item.label,
-    summary: item.summary,
-    r2Key: item.r2_key,
-    canonical:
-      item.canonical_type === undefined || item.canonical_value === undefined
-        ? undefined
-        : { type: item.canonical_type, value: item.canonical_value },
-    indexed: item.indexed ?? false,
-    origin: decodeOrigin(row.origin),
-    body: item.body,
-  }
-}
-
 const decodeRow = (row: Row): Effect.Effect<BrainItem, HelixError> =>
-  Effect.try({
-    try: () => rowToItem(row),
-    catch: (cause) =>
-      new HelixError({ message: 'invalid brain item row', cause }),
+  Effect.gen(function* () {
+    const item = yield* Schema.decodeUnknownEffect(ItemRow)(row).pipe(
+      Effect.mapError(
+        (cause) => new HelixError({ message: 'invalid brain item row', cause }),
+      ),
+    )
+    const id = yield* decodeItemId(row)
+    const origin = yield* decodeItemOrigin(item.origin)
+
+    return {
+      id,
+      tenantId: WorkspaceId.make(item.workspace_id),
+      kind: Kind.make(item.kind),
+      label: item.label,
+      summary: item.summary,
+      r2Key: item.r2_key,
+      canonical:
+        item.canonical_type === undefined || item.canonical_value === undefined
+          ? undefined
+          : { type: item.canonical_type, value: item.canonical_value },
+      indexed: item.indexed ?? false,
+      indexStatus: item.index_status,
+      indexError:
+        item.index_error === undefined || item.index_error === ''
+          ? undefined
+          : item.index_error,
+      origin,
+      body: item.body,
+    }
   })
 
 const storedId = (
@@ -306,13 +339,32 @@ const rowToBrainEdge = (raw: Row): Effect.Effect<BrainEdge, HelixError> =>
         new HelixError({ message: 'mention edge has an incomplete span' }),
       )
     }
-    const span =
+    const spanInput =
       row.mention_span_start === undefined || row.mention_span_end === undefined
         ? undefined
         : {
             start: row.mention_span_start,
             end: row.mention_span_end,
           }
+    const span =
+      spanInput === undefined
+        ? undefined
+        : yield* Schema.decodeUnknownEffect(MentionSpan)(spanInput).pipe(
+            Effect.mapError(
+              (cause) =>
+                new HelixError({
+                  message: 'mention edge has an invalid span',
+                  cause,
+                }),
+            ),
+            Effect.filterOrFail(
+              (decoded) => decoded.end >= decoded.start,
+              () =>
+                new HelixError({
+                  message: 'mention edge has an invalid ordered span',
+                }),
+            ),
+          )
     const mention =
       row.mention_text === undefined
         ? undefined
@@ -352,6 +404,12 @@ const propsOf = (item: NewBrainItem): Record<string, PropertyValueInput> => {
     props[SOURCE_KEY_PROP] = item.canonical.value
   }
   if (item.body !== undefined) props[PROPS.body] = item.body
+  if (item.indexStatus !== undefined) {
+    props[PROPS.indexStatus] = item.indexStatus
+  }
+  if (item.indexError !== undefined) {
+    props[PROPS.indexError] = item.indexError
+  }
   return props
 }
 
@@ -382,6 +440,8 @@ const itemProjection = () => [
   PropertyProjection.new('canonical_type'),
   PropertyProjection.new('canonical_value'),
   PropertyProjection.new('indexed'),
+  PropertyProjection.new(PROPS.indexStatus),
+  PropertyProjection.new(PROPS.indexError),
   PropertyProjection.new('origin'),
   PropertyProjection.new('body'),
 ]
@@ -435,12 +495,21 @@ const waitForIndex = (helix: HelixClientShape, operationId: string) =>
   })
 
 const SEARCH_FETCH_K = 50
-const RRF_K = 60
+export const RRF_K = 60
 const MAX_EMBED_CHARS = 2000
 const EMBED_BATCH_SIZE = 100
 const MAX_INDEX_SECTIONS = 1000
 const NEIGHBORHOOD_MAX_ITEMS = 50
 const NEIGHBORHOOD_MAX_EDGES = 100
+const MAX_FILE_LIST_LIMIT = 100
+
+const normalizeFileListLimit = (limit: number | undefined): number => {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return MAX_FILE_LIST_LIMIT
+  }
+
+  return Math.min(MAX_FILE_LIST_LIMIT, Math.max(1, Math.trunc(limit)))
+}
 
 const truncateForEmbed = (text: string): string =>
   text.length <= MAX_EMBED_CHARS ? text : text.slice(0, MAX_EMBED_CHARS)
@@ -457,8 +526,42 @@ const embedBatched = (
       )
       vectors.push(...result)
     }
+
+    if (vectors.length !== texts.length) {
+      return yield* Effect.fail(
+        new EmbedError({
+          message: `embedding batch returned ${vectors.length} vectors for ${texts.length} texts`,
+        }),
+      )
+    }
+
+    for (const vector of vectors) {
+      if (
+        vector.length !== EMBEDDING_DIM ||
+        vector.some((value) => !Number.isFinite(value))
+      ) {
+        return yield* Effect.fail(
+          new EmbedError({
+            message: 'embedding batch returned an invalid vector',
+          }),
+        )
+      }
+    }
+
     return vectors
   })
+
+const embeddingAt = (
+  vectors: readonly number[][],
+  index: number,
+): Effect.Effect<number[], EmbedError> => {
+  const vector = vectors[index]
+  return vector === undefined
+    ? Effect.fail(
+        new EmbedError({ message: `embedding vector ${index} is missing` }),
+      )
+    : Effect.succeed(vector)
+}
 
 /**
  * Maps caller-facing kinds onto the three labels covered by Brain indexes.
@@ -480,10 +583,10 @@ const fuse = (
   lists: readonly (readonly SearchHit[])[],
   limit: number,
 ): readonly SearchHit[] => {
-  const score = new Map<number, { hit: SearchHit; s: number }>()
+  const score = new Map<string, { hit: SearchHit; s: number }>()
   for (const list of lists) {
     list.forEach((hit, i) => {
-      const key = Number(hit.item.id)
+      const key = String(hit.item.id)
       const current = score.get(key) ?? { hit, s: 0 }
       current.s += 1 / (RRF_K + i + 1)
       score.set(key, current)
@@ -535,6 +638,35 @@ const readItem = (
     const result = yield* helix.run(request)
     const row = firstRow(result, 'item')
     if (row === undefined) return null
+    return yield* decodeRow(row)
+  })
+
+/**
+ * Reads one workspace file by its Helix storage label. File API routes use
+ * this boundary so an item ID cannot expose a note or section as a file.
+ */
+const readFileItem = (
+  helix: HelixClientShape,
+  itemId: ItemId,
+  tenantId: WorkspaceId,
+): Effect.Effect<BrainItem | null, HelixError | WriteConflict> =>
+  Effect.gen(function* () {
+    const request = readBatch()
+      .varAs(
+        'file',
+        g()
+          .n([nodeId(itemId)])
+          .where(Predicate.eq('$label', LABELS.File))
+          .where(Predicate.eq(PROPS.tenantId, tenantId))
+          .valueMap(itemProps()),
+      )
+      .returning(['file'])
+      .toQueryRequest({ queryName: QUERY.read })
+
+    const result = yield* helix.run(request)
+    const row = firstRow(result, 'file')
+    if (row === undefined) return null
+
     return yield* decodeRow(row)
   })
 
@@ -904,6 +1036,108 @@ export const makeBrain = Effect.gen(function* () {
     },
   )
 
+  /**
+   * Persists the file indexing lifecycle independently from the indexing work.
+   * Before this operation, an indexing failure left `indexed` false forever,
+   * which made failed files indistinguishable from active work.
+   */
+  const updateIndexStatus = Effect.fn('Brain.updateIndexStatus')(
+    function* (input: {
+      itemId: ItemId
+      tenantId: WorkspaceId
+      status: BrainIndexStatus
+      error?: string
+    }) {
+      const request = writeBatch()
+        .varAs(
+          'updated',
+          setProperties(
+            g()
+              .n([nodeId(input.itemId)])
+              .where(
+                Predicate.eq(PROPS.tenantId, input.tenantId),
+              ) as unknown as Traversal<'nodes', 'write'>,
+            {
+              [PROPS.indexStatus]: input.status,
+              [PROPS.indexError]: input.error?.trim() ?? '',
+              [PROPS.indexed]: input.status === 'ready',
+            },
+          ),
+        )
+        .returning(['updated'])
+        .toQueryRequest({ queryName: QUERY.updateIndexStatus })
+
+      const result = yield* retryWriteConflict(
+        helix.run(request, { awaitDurability: true }),
+      )
+
+      if (firstRow(result, 'updated') === undefined) {
+        return yield* Effect.fail(
+          new HelixError({ message: `item not found: ${input.itemId}` }),
+        )
+      }
+
+      return yield* readItem(helix, input.itemId, input.tenantId).pipe(
+        Effect.flatMap((loaded) =>
+          loaded === null
+            ? Effect.fail(
+                new HelixError({
+                  message: `item not found after status update: ${input.itemId}`,
+                }),
+              )
+            : Effect.succeed(loaded),
+        ),
+      )
+    },
+  )
+
+  /**
+   * Removes one workspace-scoped file and its derived section nodes. The
+   * returned item keeps the R2 key available for object cleanup by the caller.
+   * Separate Helix writes keep each delete query simple. A retry can safely
+   * finish the operation if section deletion succeeds but file deletion fails.
+   */
+  const deleteFile = Effect.fn('Brain.deleteFile')(function* (
+    itemId: ItemId,
+    tenantId: WorkspaceId,
+  ) {
+    const item = yield* readFileItem(helix, itemId, tenantId)
+    if (item === null) return null
+
+    const sectionsRequest = writeBatch()
+      .varAs(
+        'sections',
+        g()
+          .n([nodeId(item.id)])
+          .where(Predicate.eq('$label', LABELS.File))
+          .where(Predicate.eq(PROPS.tenantId, tenantId))
+          .out(EDGES.hasSection)
+          .drop(),
+      )
+      .returning(['sections'])
+      .toQueryRequest({ queryName: QUERY.deleteFile })
+
+    yield* retryWriteConflict(
+      helix.run(sectionsRequest, { awaitDurability: true }),
+    )
+
+    const fileRequest = writeBatch()
+      .varAs(
+        'file',
+        g()
+          .n([nodeId(item.id)])
+          .where(Predicate.eq('$label', LABELS.File))
+          .where(Predicate.eq(PROPS.tenantId, tenantId))
+          .drop(),
+      )
+      .returning(['file'])
+      .toQueryRequest({ queryName: QUERY.deleteFile })
+
+    yield* retryWriteConflict(helix.run(fileRequest, { awaitDurability: true }))
+
+    return item
+  })
+
   return Brain.of({
     ensureIndexes: () =>
       Effect.gen(function* () {
@@ -1017,14 +1251,17 @@ export const makeBrain = Effect.gen(function* () {
             .varAs('created', g().addN(storageLabel, props))
             .returning(['created'])
             .toQueryRequest({ queryName: QUERY.index })
-          const result = yield* retryWriteConflict(helix.run(request))
+          const result = yield* retryWriteConflict(
+            helix.run(request, { awaitDurability: true }),
+          )
           const row = firstRow(result, 'created')
           if (row === undefined) {
             return yield* Effect.fail(
               new HelixError({ message: 'addItem returned no node' }),
             )
           }
-          return yield* readItem(helix, idOfRow(row), item.tenantId).pipe(
+          const itemId = yield* decodeItemId(row)
+          return yield* readItem(helix, itemId, item.tenantId).pipe(
             Effect.flatMap((loaded) =>
               loaded === null
                 ? Effect.fail(
@@ -1058,11 +1295,15 @@ export const makeBrain = Effect.gen(function* () {
                 'write'
               >,
               propsWithoutR2Key(props),
-            ).setProperty(PROPS.indexed, false),
+            )
+              .setProperty(PROPS.indexed, false)
+              .setProperty(PROPS.indexError, ''),
           )
           .returning(['created', 'updated'])
           .toQueryRequest({ queryName: QUERY.index })
-        const result = yield* retryWriteConflict(helix.run(request))
+        const result = yield* retryWriteConflict(
+          helix.run(request, { awaitDurability: true }),
+        )
         const created = firstRow(result, 'created')
         const updated = firstRow(result, 'updated')
         const row = created ?? updated
@@ -1071,7 +1312,8 @@ export const makeBrain = Effect.gen(function* () {
             new HelixError({ message: 'addItem returned no node' }),
           )
         }
-        return yield* readItem(helix, idOfRow(row), item.tenantId).pipe(
+        const itemId = yield* decodeItemId(row)
+        return yield* readItem(helix, itemId, item.tenantId).pipe(
           Effect.flatMap((loaded) =>
             loaded === null
               ? Effect.fail(
@@ -1091,9 +1333,10 @@ export const makeBrain = Effect.gen(function* () {
           body,
           origin: { actor, at: DateTime.makeUnsafe(new Date()) },
         }
-        const [vector] = yield* embeddings.embed([body])
+        const vectors = yield* embedBatched(embeddings, [body])
+        const vector = yield* embeddingAt(vectors, 0)
         const props = {
-          ...propsWithEmbedding(item, vector as number[]),
+          ...propsWithEmbedding(item, vector),
           [PROPS.indexed]: true,
         }
         const request = writeBatch()
@@ -1109,7 +1352,8 @@ export const makeBrain = Effect.gen(function* () {
             new HelixError({ message: 'addText returned no node' }),
           )
         }
-        return yield* readItem(helix, idOfRow(row), item.tenantId).pipe(
+        const itemId = yield* decodeItemId(row)
+        return yield* readItem(helix, itemId, item.tenantId).pipe(
           Effect.flatMap((loaded) =>
             loaded === null
               ? Effect.fail(
@@ -1120,6 +1364,8 @@ export const makeBrain = Effect.gen(function* () {
         )
       }),
     updateItemMetadata,
+    updateIndexStatus,
+    deleteFile,
     index: (itemId, tenantId) =>
       Effect.gen(function* () {
         const item = yield* readItem(helix, itemId, tenantId).pipe(
@@ -1153,34 +1399,38 @@ export const makeBrain = Effect.gen(function* () {
           fileText,
           ...sectionBodies,
         ])
-        const fileVector = vectors[0] as number[]
+        const fileVector = yield* embeddingAt(vectors, 0)
         const sectionVectors = vectors.slice(1)
 
-        const sectionEntries = boundedChunks.map((chunk, i) => {
-          const section: NewBrainItem = {
-            tenantId: item.tenantId,
-            kind: Kind.make('section'),
-            label: chunk.title,
-            body: chunk.body,
-            r2Key: item.r2Key,
-            canonical:
-              item.canonical === undefined
-                ? undefined
-                : {
-                    type: 'section',
-                    value: `${item.canonical.value}#${chunk.path ?? chunk.title}`,
-                  },
-            origin: {
-              actor: item.origin.actor,
-              fromItem: item.id,
-              at: item.origin.at,
-            },
-          }
-          return {
-            section,
-            props: propsWithEmbedding(section, sectionVectors[i] as number[]),
-          }
-        })
+        const sectionEntries = yield* Effect.forEach(
+          boundedChunks,
+          (chunk, i) =>
+            Effect.map(embeddingAt(sectionVectors, i), (vector) => {
+              const section: NewBrainItem = {
+                tenantId: item.tenantId,
+                kind: Kind.make('section'),
+                label: chunk.title,
+                body: chunk.body,
+                r2Key: item.r2Key,
+                canonical:
+                  item.canonical === undefined
+                    ? undefined
+                    : {
+                        type: 'section',
+                        value: `${item.canonical.value}#${chunk.path ?? chunk.title}`,
+                      },
+                origin: {
+                  actor: item.origin.actor,
+                  fromItem: item.id,
+                  at: item.origin.at,
+                },
+              }
+              return {
+                section,
+                props: propsWithEmbedding(section, vector),
+              }
+            }),
+        )
 
         const existingRequest = readBatch()
           .varAs(
@@ -1202,18 +1452,20 @@ export const makeBrain = Effect.gen(function* () {
             .map((entry) => entry.section.canonical?.value)
             .filter((value): value is string => value !== undefined),
         )
-        const orphanIds = existingRows.flatMap((row) => {
+        const orphanRows = existingRows.filter((row) => {
           const canonical = row.canonical_value
-          if (typeof canonical === 'string' && newSourceKeys.has(canonical)) {
-            return []
-          }
-          return [idOfRow(row)]
+          return !(
+            typeof canonical === 'string' && newSourceKeys.has(canonical)
+          )
         })
+        const orphanIds = yield* Effect.forEach(orphanRows, decodeItemId)
 
         const indexedItem: NewBrainItem = {
           ...item,
           body: doc.body,
           summary: item.summary ?? doc.title,
+          indexStatus: 'ready',
+          indexError: '',
         }
         const fileProps = propsWithEmbedding(indexedItem, fileVector)
         const fileUpdate = setProperties(
@@ -1288,14 +1540,16 @@ export const makeBrain = Effect.gen(function* () {
             { awaitDurability: true },
           ),
         )
-        const sectionIds: ItemId[] = sectionEntries.map((_, i) => {
+        const sectionIds = yield* Effect.forEach(sectionEntries, (_, i) => {
           const created = firstRow(nodeResult, `section${i}`)
           const updated = firstRow(nodeResult, `updated${i}`)
           const row = created ?? updated
           if (row === undefined) {
-            throw new Error(`index did not return section ${i}`)
+            return Effect.fail(
+              new HelixError({ message: `index did not return section ${i}` }),
+            )
           }
-          return idOfRow({ ...row, $id: row.$id ?? row.id })
+          return decodeItemId({ ...row, $id: row.$id ?? row.id })
         })
 
         const currentSourceKeys = sectionEntries
@@ -1357,6 +1611,7 @@ export const makeBrain = Effect.gen(function* () {
             'item',
             g()
               .n([nodeId(id)])
+              .where(Predicate.eq(PROPS.tenantId, tenantId))
               .valueMap(itemProps()),
           )
           .returning(['item'])
@@ -1367,9 +1622,37 @@ export const makeBrain = Effect.gen(function* () {
         if (row.workspace_id !== tenantId) return null
         return yield* decodeRow(row)
       }),
+    readFileItem: (id, tenantId) => readFileItem(helix, id, tenantId),
+
+    listFiles: ({ tenantId, limit }) =>
+      Effect.gen(function* () {
+        const request = readBatch()
+          .varAs(
+            'files',
+            g()
+              .nWithLabelWhere(
+                LABELS.File,
+                SourcePredicate.eq(PROPS.tenantId, tenantId),
+              )
+              .orderBy(PROPS.label, Order.Asc)
+              .limit(normalizeFileListLimit(limit))
+              .valueMap(itemProps()),
+          )
+          .returning(['files'])
+          .toQueryRequest({ queryName: QUERY.listFiles })
+
+        const result = yield* helix.run(request)
+        const decodedFiles = yield* Effect.forEach(
+          rows(result, 'files'),
+          decodeRow,
+        )
+
+        return decodedFiles.filter((file) => file.tenantId === tenantId)
+      }),
     search: ({ tenantId, query, k }) =>
       Effect.gen(function* () {
-        const [queryVector] = yield* embeddings.embed([query])
+        const queryVectors = yield* embedBatched(embeddings, [query])
+        const queryVector = yield* embeddingAt(queryVectors, 0)
         const request = readBatch()
           .varAs(
             'semantic_file',
@@ -1377,7 +1660,7 @@ export const makeBrain = Effect.gen(function* () {
               .vectorSearchNodes(
                 LABELS.File,
                 VECTOR_PROP,
-                queryVector as number[],
+                queryVector,
                 SEARCH_FETCH_K,
                 tenantId,
               )
@@ -1389,7 +1672,7 @@ export const makeBrain = Effect.gen(function* () {
               .vectorSearchNodes(
                 LABELS.Section,
                 VECTOR_PROP,
-                queryVector as number[],
+                queryVector,
                 SEARCH_FETCH_K,
                 tenantId,
               )
@@ -1425,7 +1708,7 @@ export const makeBrain = Effect.gen(function* () {
               .vectorSearchNodes(
                 LABELS.Note,
                 VECTOR_PROP,
-                queryVector as number[],
+                queryVector,
                 SEARCH_FETCH_K,
                 tenantId,
               )
@@ -1527,7 +1810,7 @@ export const makeBrain = Effect.gen(function* () {
         const request = batch
           .returning(sectionIds.map((_, i) => `edge${i}`))
           .toQueryRequest({ queryName: QUERY.linkSections })
-        yield* retryWriteConflict(helix.run(request))
+        yield* retryWriteConflict(helix.run(request, { awaitDurability: true }))
       }),
     sectionsOf: (fileId, tenantId) =>
       Effect.gen(function* () {
@@ -1555,7 +1838,7 @@ export const makeBrain = Effect.gen(function* () {
     neighborhood,
     readFile: (itemId, tenantId, range) =>
       Effect.gen(function* () {
-        const item = yield* readItem(helix, itemId, tenantId).pipe(
+        const item = yield* readFileItem(helix, itemId, tenantId).pipe(
           Effect.flatMap((loaded) =>
             loaded === null
               ? Effect.fail(
