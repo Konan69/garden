@@ -117,6 +117,7 @@
     "SANDBOX_TRANSPORT": "rpc",
     "SANDBOX_LOG_LEVEL": "warn",
     "GARDEN_LOG_LEVEL": "warn",
+    "HELIX_URL": "http://localhost:6968",
     // Offline/local-model config. Empty string means "unset"; `pnpm
     // dev:offline` overrides via process env (wrangler only forwards env keys
     // that are declared in `vars` or `secrets.required`). Deployed workers

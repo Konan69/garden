@@ -41,6 +41,7 @@ import {
 } from './documents/document-artifact-model'
 import { createProposeAgentTool } from './agent-tools/propose-agent'
 import { createWebTools, type WebToolsSqlValue } from './agent-tools/web'
+import { createBrainTools, type BrainToolContext } from './agent-tools/brain'
 import { listAvailableConnectorBindings } from '@garden/server/connectors/availability'
 import { createSandboxTools } from './sandbox-tools'
 import {
@@ -74,6 +75,13 @@ type ChatSubAgentToolsInput = {
   getSandbox: () => SandboxDO
   issueRunEnv: IssueRunEnv
   cancelIssueRun?: (input: { issueId: string; runId: string }) => Promise<void>
+  brain: {
+    helixUrl?: string
+    helixApiKey?: string
+    ai: Ai
+    files: R2Bucket
+    getContext?: () => BrainToolContext | null | Promise<BrainToolContext | null>
+  }
 }
 
 const readRunStatusSchema = z.enum([
@@ -1720,6 +1728,11 @@ async function postIssueCommentFromChat(
   return Result.ok({ comment_id: commentResult.value.comment_id })
 }
 
+/**
+ * Composes shared chat/issue tools with the runtime's authoritative context.
+ * Previously Brain always reloaded chat-thread identity, so issue runs wrote
+ * chat ids; callers can now pass the active issue-run workspace, agent, and run.
+ */
 export function createChatSubAgentTools({
   ctx,
   documentArtifacts,
@@ -1731,6 +1744,7 @@ export function createChatSubAgentTools({
   getSandbox,
   issueRunEnv,
   cancelIssueRun,
+  brain,
 }: ChatSubAgentToolsInput): ToolSet {
   const documentContext = (): DocumentToolContext | null =>
     databaseUrl && threadId
@@ -1761,6 +1775,29 @@ export function createChatSubAgentTools({
       env: exaApiKey ? { EXA_API_KEY: exaApiKey } : {},
       sql: (query, ...params) =>
         ctx.storage.sql.exec(query, ...(params as WebToolsSqlValue[])),
+    }),
+    ...createBrainTools({
+      env: {
+        ...(brain.helixUrl === undefined ? {} : { HELIX_URL: brain.helixUrl }),
+        ...(brain.helixApiKey === undefined
+          ? {}
+          : { HELIX_API_KEY: brain.helixApiKey }),
+      },
+      ai: brain.ai,
+      files: brain.files,
+      getContext: brain.getContext ?? (async () => {
+        if (!databaseUrl || !threadId) return null
+        const threadResult = await loadChatThreadContext({
+          databaseUrl,
+          threadId,
+        })
+        if (threadResult.isErr()) return null
+        return {
+          workspaceId: threadResult.value.workspaceId,
+          agentId: threadResult.value.agentId,
+          runId: threadResult.value.threadId,
+        }
+      }),
     }),
 
     // Client-side tool — no execute function. The UI renders an interactive

@@ -56,6 +56,7 @@
     "overrides": {
       "alchemy@0.93.12>miniflare": "4.20260714.0",
       "@posthog/cli": "0.8.4",
+      "sharp": "0.33.5",
       "effect": "4.0.0-beta.102",
       "@effect/atom-react": "4.0.0-beta.102",
       "@effect/platform-node": "4.0.0-beta.102",
@@ -91,7 +92,8 @@
       "ws": "8.21.0"
     },
     "patchedDependencies": {
-      "agents@0.17.3": "patches/agents@0.17.3.patch"
+      "agents@0.17.3": "patches/agents@0.17.3.patch",
+      "@helix-db/helix-db@3.0.2": "patches/@helix-db__helix-db@3.0.2.patch"
     }
   },
   "dependencies": {

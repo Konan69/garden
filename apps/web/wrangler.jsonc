@@ -26,6 +26,10 @@
       "DATABASE_URL",
       "ENVIRONMENT",
       "EXECUTOR_SECRET_KEY",
+      // Set HELIX_URL to the edge-reachable hosted Helix base URL for staging;
+      // never bind the localhost development endpoint in a deployed Worker.
+      "HELIX_URL",
+      "HELIX_API_KEY",
     ],
   },
   "hyperdrive": [

@@ -1,0 +1,46 @@
+{
+  "name": "@garden/brain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "lint:fix": "oxlint -c ../../.oxlintrc.json --fix ."
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./domain": "./src/domain/items.ts",
+    "./errors": "./src/errors.ts",
+    "./helix": "./src/helix/constants.ts",
+    "./services/helix-client": "./src/services/HelixClient.ts",
+    "./services/embeddings": "./src/services/Embeddings.ts",
+    "./services/local-embeddings": "./src/services/LocalEmbeddings.ts",
+    "./services/worker": "./src/services/worker.ts",
+    "./services/web": "./src/services/web.ts",
+    "./services/chunker": "./src/services/Chunker.ts",
+    "./services/extractor": "./src/services/Extractor.ts",
+    "./services/raw-file-store": "./src/services/RawFileStore.ts",
+    "./services/page-index": "./src/services/PageIndex.ts",
+    "./services/brain": "./src/services/Brain.ts",
+    "./layers": "./src/layers.ts"
+  },
+  "dependencies": {
+    "@garden/env": "workspace:*",
+    "@helix-db/helix-db": "catalog:",
+    "@xenova/transformers": "catalog:",
+    "effect": "catalog:",
+    "exceljs": "catalog:",
+    "mammoth": "catalog:",
+    "unpdf": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.0.0-beta.102",
+    "@effect/vitest": "catalog:",
+    "@garden/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "vitest": "catalog:"
+  }
+}

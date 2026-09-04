@@ -4,6 +4,7 @@ import {
   AgentDO,
   AutomationRunSubAgent,
   AutomationTriggerDO,
+  BrainAuditSubAgent,
   ChatSubAgent,
   IssueRunSubAgent,
   RunWorkflow,
@@ -44,6 +45,7 @@ import {
 export { AgentDO }
 export { AutomationRunSubAgent }
 export { AutomationTriggerDO }
+export { BrainAuditSubAgent }
 export { ChatSubAgent }
 export { IssueRunSubAgent }
 export { RunWorkflow }

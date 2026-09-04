@@ -68,6 +68,7 @@ import { mcpRuntimeConfig } from './mcp-runtime-config'
 import { assembleFoundationPrompt } from './prompt'
 import { createSandboxTools } from './sandbox-tools'
 import { createWebTools, type WebToolsSqlValue } from './agent-tools/web'
+import { createBrainTools } from './agent-tools/brain'
 import { loadRuntimeSkillSources } from './skills'
 import { logAgentSocketError } from './websocket-errors'
 import {
@@ -100,6 +101,8 @@ type AgentRuntimeEnv = Cloudflare.Env &
   Sandbox: DurableObjectNamespace<SandboxDO>
   MCP_SESSION: DurableObjectNamespace
   RUN_WORKFLOW: RunWorkflowBinding
+  HELIX_URL?: string
+  HELIX_API_KEY?: string
 }
 
 type TurnMode = 'start' | 'resume'
@@ -424,6 +427,27 @@ export class AutomationRunSubAgent extends Think<AgentRuntimeEnv> {
         env: this.env.EXA_API_KEY ? { EXA_API_KEY: this.env.EXA_API_KEY } : {},
         sql: (query, ...params) =>
           this.ctx.storage.sql.exec(query, ...(params as WebToolsSqlValue[])),
+      }),
+      ...createBrainTools({
+        env: {
+          ...(this.env.HELIX_URL === undefined
+            ? {}
+            : { HELIX_URL: this.env.HELIX_URL }),
+          ...(this.env.HELIX_API_KEY === undefined
+            ? {}
+            : { HELIX_API_KEY: this.env.HELIX_API_KEY }),
+        },
+        ai: this.env.AI,
+        files: this.env.FILES,
+        getContext: () => {
+          const ctx = this.currentLogContext
+          if (ctx === null) return null
+          return {
+            workspaceId: String(ctx.workspaceId),
+            agentId: String(ctx.agentId),
+            runId: String(ctx.runId),
+          }
+        },
       }),
       ...createBrowserTools({
         browser: this.env.BROWSER,
