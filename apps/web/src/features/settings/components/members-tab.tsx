@@ -9,6 +9,8 @@ import {
   Clock,
   X,
   Mail,
+  MailWarning,
+  SendHorizontal,
 } from 'lucide-react'
 import { ActorAvatar } from '../../common/actor-avatar'
 import type { MemberWithUser, MemberRole, Invitation } from '@garden/core/types'
@@ -175,41 +177,65 @@ function MemberRow({
   )
 }
 
+/**
+ * Invitation rows distinguish expired invites (pending status, past
+ * expiresAt) from live ones so admins see why a link stopped working, and get
+ * a one-click resend that refreshes the same invite instead of creating a
+ * duplicate row.
+ */
 function InvitationRow({
   invitation,
   canManage,
   onRevoke,
+  onResend,
   busy,
 }: {
   invitation: Invitation
   canManage: boolean
   onRevoke: () => void
+  onResend: () => void
   busy: boolean
 }) {
   const rc = roleConfig[invitation.role]
+  const expired = new Date(invitation.expiresAt).getTime() <= Date.now()
 
   return (
     <li className="flex items-center gap-3 py-3">
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-        <Mail className="h-4 w-4 text-muted-foreground" />
+        {expired ? (
+          <MailWarning className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <Mail className="h-4 w-4 text-muted-foreground" />
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{invitation.email}</div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
-          <span>Pending</span>
+          <span>{expired ? 'Expired — resend to reactivate' : 'Pending'}</span>
         </div>
       </div>
       {canManage && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={busy}
-          onClick={onRevoke}
-          title="Revoke invitation"
-        >
-          <X className="h-4 w-4 text-muted-foreground" />
-        </Button>
+        <>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={busy}
+            onClick={onResend}
+            title={expired ? 'Resend (extends expiry)' : 'Resend invitation'}
+          >
+            <SendHorizontal className="h-4 w-4 text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={busy}
+            onClick={onRevoke}
+            title="Revoke invitation"
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </>
       )}
       <Badge variant="outline">{rc.label}</Badge>
     </li>
@@ -286,6 +312,27 @@ export function MembersTab() {
         }
       },
     })
+  }
+
+  const handleResendInvitation = (invitation: Invitation) => {
+    if (!workspace) return
+    setInvitationActionId(invitation.id)
+    void api
+      .createMember(workspace.id, {
+        email: invitation.email,
+        role: invitation.role,
+        resend: true,
+      })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: workspaceKeys.invitations(wsId) })
+        toast.success(`Invitation resent to ${invitation.email}`)
+      })
+      .catch((e: unknown) => {
+        toast.error(
+          e instanceof Error ? e.message : 'Failed to resend invitation',
+        )
+      })
+      .finally(() => setInvitationActionId(null))
   }
 
   const handleRoleChange = async (memberId: string, role: MemberRole) => {
@@ -412,6 +459,7 @@ export function MembersTab() {
                 invitation={inv}
                 canManage={canManageWorkspace}
                 onRevoke={() => handleRevokeInvitation(inv)}
+                onResend={() => handleResendInvitation(inv)}
                 busy={invitationActionId === inv.id}
               />
             ))}

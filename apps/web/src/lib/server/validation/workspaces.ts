@@ -35,6 +35,12 @@ export const createWorkspaceMemberBodySchema = z
   .object({
     email: z.string().trim().email(),
     role: memberRoleSchema.optional(),
+    /**
+     * Idempotent re-send of an existing pending invitation. The route refreshes
+     * expiresAt on the existing row (covering expired invites, which Better
+     * Auth's own resend flag excludes) instead of creating a duplicate.
+     */
+    resend: z.boolean().optional(),
   })
   .strict()
 

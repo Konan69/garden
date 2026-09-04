@@ -54,8 +54,14 @@ async function runRecoveryRequest(request: Promise<AuthResponse>) {
 
 export function RequestPasswordResetPage({
   initialEmail = '',
+  redirectTarget,
 }: {
   initialEmail?: string
+  /**
+   * Sanitized post-auth target (usually an invite link). Appended to the
+   * emailed reset URL so completing recovery returns to the original flow.
+   */
+  redirectTarget?: string
 }) {
   const [email, setEmail] = useState(initialEmail)
   const [error, setError] = useState('')
@@ -68,10 +74,16 @@ export function RequestPasswordResetPage({
     setLoading(true)
     setError('')
 
+    const resetUrl = new URL(
+      '/reset-password',
+      window.location.origin,
+    )
+    if (redirectTarget) resetUrl.searchParams.set('redirect', redirectTarget)
+
     void runRecoveryRequest(
       authClient.requestPasswordReset({
         email,
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: resetUrl.href,
       }),
     )
       .then((result) =>
@@ -108,7 +120,7 @@ export function RequestPasswordResetPage({
           >
             Send another link
           </Button>
-          <BackToSignIn />
+          <BackToSignIn redirectTarget={redirectTarget} />
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
@@ -138,7 +150,7 @@ export function RequestPasswordResetPage({
                 {loading ? 'Sending link...' : 'Send reset link'}
               </Button>
             </Field>
-            <BackToSignIn />
+            <BackToSignIn redirectTarget={redirectTarget} />
           </FieldGroup>
         </form>
       )}
@@ -149,9 +161,12 @@ export function RequestPasswordResetPage({
 export function ResetPasswordPage({
   token,
   invalidToken,
+  redirectTarget,
 }: {
   token?: string
   invalidToken: boolean
+  /** Sanitized post-auth target preserved from the emailed reset URL. */
+  redirectTarget?: string
 }) {
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
@@ -180,7 +195,7 @@ export function ResetPasswordPage({
             toast.success('Password updated. Sign in with your new password.')
             void navigate({
               to: '/login',
-              search: { redirect: undefined },
+              search: { redirect: redirectTarget },
               replace: true,
             })
           },
@@ -206,13 +221,13 @@ export function ResetPasswordPage({
         <div className="space-y-4">
           <Link
             to="/forgot-password"
-            search={{ email: undefined }}
+            search={{ email: undefined, redirect: redirectTarget }}
             className={buttonVariants({ className: 'w-full' })}
           >
             Request a new link
             <ArrowRightIcon className="size-4" />
           </Link>
-          <BackToSignIn />
+          <BackToSignIn redirectTarget={redirectTarget} />
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
@@ -298,12 +313,12 @@ function RecoveryShell({
   )
 }
 
-function BackToSignIn() {
+function BackToSignIn({ redirectTarget }: { redirectTarget?: string }) {
   return (
     <FieldDescription className="text-center">
       <Link
         to="/login"
-        search={{ redirect: undefined }}
+        search={{ redirect: redirectTarget }}
         className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4"
       >
         <ArrowLeftIcon className="size-3.5" />

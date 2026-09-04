@@ -1,12 +1,28 @@
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { MailQuestion } from 'lucide-react'
+import { Result } from 'better-result'
+import { toast } from 'sonner'
+import { z } from 'zod'
 import { Badge } from '@garden/ui/components/ui/badge'
 import { Button } from '@garden/ui/components/ui/button'
+import { authClient } from '@/lib/auth/client'
+import { invitationUnavailableMessages } from '@/lib/invitation-flow'
 import { acceptInvitationForCurrentUser } from '@/lib/server/invitations'
 
 export const Route = createFileRoute('/_authenticated/invitations/$id')({
   loader: async ({ params }) => {
+    // Guard malformed ids here so the page renders the unavailable state
+    // instead of surfacing a server-fn validation throw.
+    if (!z.string().uuid().safeParse(params.id).success) {
+      return {
+        status: 'unavailable' as const,
+        reason: 'malformed' as const,
+        message: invitationUnavailableMessages.malformed,
+      }
+    }
+
     const result = await acceptInvitationForCurrentUser({
       data: { invitationId: params.id },
     })
@@ -36,6 +52,7 @@ export const Route = createFileRoute('/_authenticated/invitations/$id')({
  */
 function InvitationRoute() {
   const result = Route.useLoaderData()
+  const { id: invitationId } = Route.useParams()
   const navigate = useNavigate()
 
   if (result.status === 'email_mismatch') {
@@ -49,22 +66,25 @@ function InvitationRoute() {
             : `This invite is for ${result.invitationEmail}, but you are signed in as ${result.sessionEmail}. Sign out and create or use the invited account to join.`
         }
       >
-        <Button
-          className="mt-8"
-          onClick={() =>
-            void navigate({
-              to: '/workspace',
-              search: {
-                connector_flow: undefined,
-                connector_id: undefined,
-                workspace_id: undefined,
-                issue: undefined,
-              },
-            })
-          }
-        >
-          Back to workspace
-        </Button>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <SignOutAndContinueButton invitationId={invitationId} />
+          <Button
+            variant="outline"
+            onClick={() =>
+              void navigate({
+                to: '/workspace',
+                search: {
+                  connector_flow: undefined,
+                  connector_id: undefined,
+                  workspace_id: undefined,
+                  issue: undefined,
+                },
+              })
+            }
+          >
+            Back to workspace
+          </Button>
+        </div>
       </InvitationShell>
     )
   }
@@ -92,6 +112,50 @@ function InvitationRoute() {
         Back to workspace
       </Button>
     </InvitationShell>
+  )
+}
+
+/**
+ * One-click escape for the wrong-account state: signs the current session out
+ * and bounces to sign-in with the invite link preserved, so the user lands
+ * back in the locked invitation flow instead of a bare auth page. Deliberately
+ * bypasses the app-state auth store — its global onLogout callback hard-
+ * navigates to bare `/login` (web-providers.tsx), which would drop the invite
+ * redirect — and `@/lib/api/auth`, whose transport module chain hangs this
+ * route's SSR.
+ */
+function SignOutAndContinueButton({ invitationId }: { invitationId: string }) {
+  const navigate = useNavigate()
+  const [pending, setPending] = useState(false)
+
+  return (
+    <Button
+      disabled={pending}
+      onClick={async () => {
+        setPending(true)
+        const requestResult = await Result.tryPromise({
+          try: () => authClient.signOut(),
+          catch: (cause) => cause,
+        })
+        const signOutResult = requestResult.andThen((response) =>
+          response.error ? Result.err(response.error) : Result.ok(undefined),
+        )
+
+        await signOutResult.match({
+          ok: () =>
+            navigate({
+              to: '/login',
+              search: { redirect: `/invitations/${invitationId}` },
+            }),
+          err: async () => {
+            setPending(false)
+            toast.error('Could not sign out. Please try again.')
+          },
+        })
+      }}
+    >
+      {pending ? 'Signing out...' : 'Sign out and continue'}
+    </Button>
   )
 }
 

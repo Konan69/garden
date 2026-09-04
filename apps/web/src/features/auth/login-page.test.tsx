@@ -138,6 +138,37 @@ describe('LoginPage', () => {
     )
   })
 
+  it('preserves the invitation redirect in the forgot-password link', () => {
+    renderLoginPage({
+      initialEmail: 'invitee@example.com',
+      lockedEmail: true,
+      redirectTarget: '/invitations/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d',
+    })
+
+    expect(
+      screen.getByRole('link', { name: /forgot password/i }),
+    ).toHaveAttribute(
+      'href',
+      '/forgot-password?email=invitee%40example.com&redirect=%2Finvitations%2F9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d',
+    )
+  })
+
+  it.each([
+    ['signin', /create an account/i],
+    ['signup', /^sign in$/i],
+  ] as const)('locks %s mode during a pending invite flow', (mode, toggleName) => {
+    renderLoginPage({
+      initialEmail: 'invitee@example.com',
+      initialMode: mode,
+      lockedEmail: true,
+      invitationWorkspaceName: 'Garden Dev',
+    })
+
+    expect(
+      screen.queryByRole('button', { name: toggleName }),
+    ).not.toBeInTheDocument()
+  })
+
   it('keeps privacy and terms available from the public auth surface', () => {
     renderLoginPage()
 

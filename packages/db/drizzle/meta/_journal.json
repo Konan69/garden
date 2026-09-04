@@ -316,6 +316,13 @@
       "when": 1786168242609,
       "tag": "0044_mute_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788477954030,
+      "tag": "0045_early_doctor_octopus",
+      "breakpoints": true
     }
   ]
 }
