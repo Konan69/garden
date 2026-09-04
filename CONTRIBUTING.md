@@ -4,8 +4,11 @@ Thanks for helping improve Garden.
 
 ## Development
 
-Follow the setup instructions in [README.md](README.md#run-garden-locally), then
-run the checks relevant to your change. The full test suite starts Postgres 16
+Follow the [developer onboarding guide](docs/development/onboarding.md) for a
+complete local setup and system walkthrough. The shorter setup path remains in
+[README.md](README.md#run-garden-locally).
+
+Run the checks relevant to your change. The full test suite starts Postgres 16
 through Testcontainers, so Docker must be running. Before opening a pull
 request, run the same main checks as CI:
 
