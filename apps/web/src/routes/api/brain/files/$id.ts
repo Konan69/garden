@@ -5,6 +5,11 @@ import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import { createGardenLogger, errorFields } from '@garden/observability/logger'
 import {
+  BrainFileIdSchema,
+  BrainFileResponseSchema,
+  brainFileStatusOf,
+} from '@/features/brain/contract'
+import {
   requireAppRequestContext,
   type AppRequestContext,
 } from '@/lib/server/context'
@@ -43,15 +48,6 @@ const logRetryPreparationFailure = (
   })
 
 /**
- * Maps stored indexing fields to the public file status. Older Brain items can
- * lack `indexStatus`, so `indexed` remains the compatibility source.
- */
-const fileStatusOf = (item: {
-  indexed: boolean
-  indexStatus?: 'processing' | 'ready' | 'failed'
-}) => item.indexStatus ?? (item.indexed ? 'ready' : 'processing')
-
-/**
  * Returns the public status of one file in the active workspace. `readFileItem`
  * prevents another Brain node type from passing through this file endpoint.
  */
@@ -65,6 +61,9 @@ export const getBrainFileStatus = async ({
   const appContext = requireAppRequestContext(context)
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
+  const itemIdResult = BrainFileIdSchema.safeParse(params.id)
+  if (!itemIdResult.success) return badRequest('Invalid Brain file id')
+  const itemId = ItemId.make(itemIdResult.data)
 
   const env = appContext.env as AppEnv & {
     HELIX_URL?: string
@@ -87,7 +86,7 @@ export const getBrainFileStatus = async ({
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
         brain.readFileItem(
-          ItemId.make(params.id),
+          itemId,
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
       ).pipe(Effect.provide(brainLive)),
@@ -104,20 +103,19 @@ export const getBrainFileStatus = async ({
   const item = readResult.success
   if (item === null) return notFound('Brain file not found')
 
-  return Response.json(
-    {
-      item: {
-        id: item.id,
-        name: item.label,
-        status: fileStatusOf(item),
-      },
+  const body = BrainFileResponseSchema.parse({
+    item: {
+      id: item.id,
+      name: item.label,
+      status: brainFileStatusOf(item),
     },
-    {
-      headers: {
-        'Cache-Control': 'no-store',
-      },
+  })
+
+  return Response.json(body, {
+    headers: {
+      'Cache-Control': 'no-store',
     },
-  )
+  })
 }
 
 /**
@@ -135,6 +133,9 @@ export const retryBrainFileIndexing = async ({
   const appContext = requireAppRequestContext(context)
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
+  const itemIdResult = BrainFileIdSchema.safeParse(params.id)
+  if (!itemIdResult.success) return badRequest('Invalid Brain file id')
+  const itemId = ItemId.make(itemIdResult.data)
 
   const retryContext = {
     itemId: params.id,
@@ -163,7 +164,7 @@ export const retryBrainFileIndexing = async ({
         Effect.gen(function* () {
           const item = yield* brain
             .readFileItem(
-              ItemId.make(params.id),
+              itemId,
               WorkspaceId.make(workspaceContext.workspaceId),
             )
             .pipe(
@@ -172,7 +173,7 @@ export const retryBrainFileIndexing = async ({
               ),
             )
 
-          if (item === null || fileStatusOf(item) === 'ready') return item
+          if (item === null || brainFileStatusOf(item) === 'ready') return item
 
           return yield* brain
             .updateIndexStatus({
@@ -204,7 +205,7 @@ export const retryBrainFileIndexing = async ({
   const item = prepareResult.success
   if (item === null) return notFound('Brain file not found')
 
-  const status = fileStatusOf(item)
+  const status = brainFileStatusOf(item)
   if (status !== 'ready') {
     const ingestionLive = makeBrainFileIngestionLayer(env).pipe(
       Layer.provide(
@@ -225,16 +226,15 @@ export const retryBrainFileIndexing = async ({
     )
   }
 
-  return Response.json(
-    {
-      item: {
-        id: item.id,
-        name: item.label,
-        status,
-      },
+  const body = BrainFileResponseSchema.parse({
+    item: {
+      id: item.id,
+      name: item.label,
+      status,
     },
-    { status: status === 'ready' ? 200 : 202 },
-  )
+  })
+
+  return Response.json(body, { status: status === 'ready' ? 200 : 202 })
 }
 
 /**
@@ -255,6 +255,9 @@ export const deleteBrainFile = async ({
   const appContext = requireAppRequestContext(context)
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
+  const itemIdResult = BrainFileIdSchema.safeParse(params.id)
+  if (!itemIdResult.success) return badRequest('Invalid Brain file id')
+  const itemId = ItemId.make(itemIdResult.data)
 
   const env = appContext.env as AppEnv & {
     HELIX_URL?: string
@@ -275,7 +278,7 @@ export const deleteBrainFile = async ({
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
         brain.deleteFile(
-          ItemId.make(params.id),
+          itemId,
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
       ).pipe(Effect.provide(brainLive)),

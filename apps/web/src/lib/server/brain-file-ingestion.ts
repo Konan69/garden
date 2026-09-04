@@ -167,7 +167,7 @@ export const makeBrainFileIngestionLayer = (
             ),
           )
 
-        if (added.r2Key !== undefined && added.r2Key !== input.r2Key) {
+        if (added.r2Key !== input.r2Key) {
           yield* discardStagedUpload({
             r2Key: input.r2Key,
             reason: 'duplicate',

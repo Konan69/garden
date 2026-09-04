@@ -1,20 +1,11 @@
 import { getApiTransport } from '@/lib/api/state'
+import {
+  BrainFileListResponseSchema,
+  BrainFileResponseSchema,
+  type BrainFileSummary,
+} from './contract'
 
-export type BrainFileStatus = 'processing' | 'ready' | 'failed'
-
-export interface BrainFileSummary {
-  id: string
-  name: string
-  status: BrainFileStatus
-}
-
-interface BrainFileResponse {
-  item: BrainFileSummary
-}
-
-interface BrainFileListResponse {
-  items: BrainFileSummary[]
-}
+export type { BrainFileStatus, BrainFileSummary } from './contract'
 
 export async function uploadBrainFile(
   file: File,
@@ -23,39 +14,42 @@ export async function uploadBrainFile(
   const formData = new FormData()
   formData.set('file', file)
 
-  const response =
-    await getApiTransport().requestFormWithProgress<BrainFileResponse>(
-      '/api/brain/files',
-      formData,
-      onProgress,
-    )
+  const response = await getApiTransport().requestFormWithProgress<unknown>(
+    '/api/brain/files',
+    formData,
+    onProgress,
+  )
 
-  return response.item
+  return BrainFileResponseSchema.parse(response).item
 }
 
-export async function listBrainFiles(): Promise<BrainFileSummary[]> {
-  const response =
-    await getApiTransport().request<BrainFileListResponse>('/api/brain/files')
+export async function listBrainFiles(
+  signal?: AbortSignal,
+): Promise<BrainFileSummary[]> {
+  const response = await getApiTransport().request<unknown>(
+    '/api/brain/files',
+    { signal },
+  )
 
-  return response.items
+  return BrainFileListResponseSchema.parse(response).items
 }
 
 export async function getBrainFile(id: string): Promise<BrainFileSummary> {
-  const response = await getApiTransport().request<BrainFileResponse>(
+  const response = await getApiTransport().request<unknown>(
     `/api/brain/files/${encodeURIComponent(id)}`,
   )
 
-  return response.item
+  return BrainFileResponseSchema.parse(response).item
 }
 
 /** Restarts indexing for one file in the active workspace. */
 export async function retryBrainFile(id: string): Promise<BrainFileSummary> {
-  const response = await getApiTransport().request<BrainFileResponse>(
+  const response = await getApiTransport().request<unknown>(
     `/api/brain/files/${encodeURIComponent(id)}`,
     { method: 'POST' },
   )
 
-  return response.item
+  return BrainFileResponseSchema.parse(response).item
 }
 
 /**

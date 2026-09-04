@@ -2,7 +2,7 @@ import { NodeFileSystem } from '@effect/platform-node'
 import { DateTime, Effect, Layer } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { expect, layer } from '@effect/vitest'
-import { Brain } from '../src/services/Brain.ts'
+import { Brain, RRF_K } from '../src/services/Brain.ts'
 import { Kind, WorkspaceId } from '../src/domain/items.ts'
 import type { NewBrainItem } from '../src/domain/items.ts'
 import { BrainLive } from '../src/layers.ts'
@@ -25,9 +25,10 @@ const BrainTestLive = Layer.merge(
   withTestConfig(BrainLive),
   NodeFileSystem.layer,
 )
+const skipHelixIntegration = process.env.GARDEN_ITEST_HELIX !== '1'
 
 layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
-  it.effect.skip('adds and reads a brain item', () =>
+  it.effect.skipIf(skipHelixIntegration)('adds and reads a brain item', () =>
     Effect.gen(function* () {
       const brain = yield* Brain
       const added = yield* brain.addItem(note())
@@ -41,30 +42,34 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
     }),
   )
 
-  it.effect.skip('treats canonical duplicates as the same item', () =>
-    Effect.gen(function* () {
-      const brain = yield* Brain
-      const first = yield* brain.addItem(
-        note({ canonical: { type: 'file', value: 'shared.md' } }),
-      )
-      const second = yield* brain.addItem(
-        note({ canonical: { type: 'file', value: 'shared.md' } }),
-      )
-      expect(second.id).toBe(first.id)
-      expect(second.tenantId).toBe(first.tenantId)
-    }),
+  it.effect.skipIf(skipHelixIntegration)(
+    'treats canonical duplicates as the same item',
+    () =>
+      Effect.gen(function* () {
+        const brain = yield* Brain
+        const first = yield* brain.addItem(
+          note({ canonical: { type: 'file', value: 'shared.md' } }),
+        )
+        const second = yield* brain.addItem(
+          note({ canonical: { type: 'file', value: 'shared.md' } }),
+        )
+        expect(second.id).toBe(first.id)
+        expect(second.tenantId).toBe(first.tenantId)
+      }),
   )
 
-  it.effect.skip('rejects reads from a different tenant', () =>
-    Effect.gen(function* () {
-      const brain = yield* Brain
-      const added = yield* brain.addItem(note())
-      const other = yield* brain.read(added.id, WorkspaceId.make('ws-other'))
-      expect(other).toBeNull()
-    }),
+  it.effect.skipIf(skipHelixIntegration)(
+    'rejects reads from a different tenant',
+    () =>
+      Effect.gen(function* () {
+        const brain = yield* Brain
+        const added = yield* brain.addItem(note())
+        const other = yield* brain.read(added.id, WorkspaceId.make('ws-other'))
+        expect(other).toBeNull()
+      }),
   )
 
-  it.effect.skip(
+  it.effect.skipIf(skipHelixIntegration)(
     'addText items are searchable regardless of the free-text kind',
     () =>
       Effect.gen(function* () {
@@ -94,12 +99,11 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
         const hit = hits.find((h) => h.item.id === added.id)
         expect(hit?.item.kind).toBe(Kind.make('decision'))
         expect(hit?.score).toBeGreaterThan(0)
-        expect(hit?.score).toBeLessThanOrEqual(6 / 51)
+        expect(hit?.score).toBeLessThanOrEqual(6 * (1 / (RRF_K + 1)))
       }),
-    120000,
   )
 
-  it.effect.skip(
+  it.effect.skipIf(skipHelixIntegration)(
     'invalidates changed content and removes stale sections on re-index',
     () =>
       Effect.scoped(
@@ -179,6 +183,5 @@ layer(BrainTestLive, { excludeTestServices: true })('brain', (it) => {
           ).toEqual(['Alpha', 'Beta'])
         }),
       ),
-    120000,
   )
 })

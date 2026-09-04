@@ -32,6 +32,7 @@ function PdfPageCanvas({
   pdf: PDFDocumentProxy
   thumbnail?: boolean
 }) {
+  const [renderFailed, setRenderFailed] = useState(false)
   const pageQuery = useQuery({
     queryKey: ['brain', 'files', fileId, 'pdf', 'page', pageNumber] as const,
     queryFn: () => pdf.getPage(pageNumber),
@@ -58,7 +59,15 @@ function PdfPageCanvas({
         viewport,
       })
 
-      void renderTask.promise
+      void renderTask.promise.catch((cause: unknown) => {
+        if (
+          cause instanceof Error &&
+          cause.name === 'RenderingCancelledException'
+        ) {
+          return
+        }
+        setRenderFailed(true)
+      })
 
       return () => renderTask.cancel()
     },
@@ -84,7 +93,7 @@ function PdfPageCanvas({
     )
   }
 
-  if (pageQuery.isError) {
+  if (pageQuery.isError || renderFailed) {
     return (
       <div
         role="alert"
@@ -191,7 +200,12 @@ export function PdfFilePreview({ fileId }: { fileId: string }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-6">
-          <PdfPageCanvas fileId={fileId} pageNumber={selectedPage} pdf={pdf} />
+          <PdfPageCanvas
+            key={selectedPage}
+            fileId={fileId}
+            pageNumber={selectedPage}
+            pdf={pdf}
+          />
         </div>
       </div>
     </div>

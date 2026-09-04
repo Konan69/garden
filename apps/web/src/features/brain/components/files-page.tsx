@@ -9,6 +9,7 @@ import { BrainFileUploadDialog } from './file-upload-dialog'
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.pdf,.docx,.xlsx'
 
+/** Shows one file, its indexing state, and its available recovery action. */
 function BrainFileCard({
   isPolling,
   isRetrying,
@@ -76,6 +77,7 @@ function BrainFileCard({
   )
 }
 
+/** Manages workspace file listing, upload review, retry, polling, and preview. */
 export function BrainFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [previewFile, setPreviewFile] = useState<BrainFileSummary | null>(null)
@@ -92,7 +94,12 @@ export function BrainFilesPage() {
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadBrainFile(file, setUploadProgress),
     onMutate: () => setUploadProgress(0),
-    onSuccess: (uploadedFile) => {
+    onSuccess: async (uploadedFile) => {
+      await queryClient.cancelQueries({
+        queryKey: brainFileKeys.list(),
+        exact: true,
+      })
+
       queryClient.setQueryData<BrainFileSummary[]>(
         brainFileKeys.list(),
         (currentFiles = []) => [
@@ -122,7 +129,12 @@ export function BrainFilesPage() {
 
   const retryMutation = useMutation({
     mutationFn: (id: string) => retryBrainFile(id),
-    onSuccess: (retriedFile) => {
+    onSuccess: async (retriedFile) => {
+      await queryClient.cancelQueries({
+        queryKey: brainFileKeys.list(),
+        exact: true,
+      })
+
       queryClient.setQueryData<BrainFileSummary[]>(
         brainFileKeys.list(),
         (currentFiles = []) =>

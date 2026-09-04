@@ -1,5 +1,5 @@
 import type { QueryRequest } from '@helix-db/helix-db'
-import { Effect } from 'effect'
+import { DateTime, Effect } from 'effect'
 import { expect, it } from '@effect/vitest'
 import { EDGES } from '../src/helix/constants.ts'
 import { ItemId, Kind, WorkspaceId } from '../src/domain/items.ts'
@@ -409,5 +409,99 @@ it.effect('lists a bounded file set without leaking another workspace', () =>
     expect(request).toContain('"string":"file"')
     expect(request).toContain('"workspace_id"')
     expect(request).toContain('"limit"')
+  }),
+)
+
+it.effect('scopes direct reads in the Helix traversal', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const brain = yield* testBrain(
+      () => ({ item: [itemRow(1, 'Note')] }),
+      calls,
+    )
+
+    const item = yield* brain.read(ItemId.make('1'), tenantId)
+
+    expect(item?.id).toBe(ItemId.make('1'))
+    const request = calls[0]?.request.toJsonString() ?? ''
+    expect(request).toContain('"property":"workspace_id"')
+    expect(request).toContain('"string":"ws-graph"')
+  }),
+)
+
+it.effect('waits for durable item creation before returning', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    let responseIndex = 0
+    const brain = yield* testBrain(
+      () =>
+        responseIndex++ === 0
+          ? { created: [itemRow(1, 'Durable note')] }
+          : { item: [itemRow(1, 'Durable note')] },
+      calls,
+    )
+
+    yield* brain.addItem({
+      tenantId,
+      kind: Kind.make('note'),
+      label: 'Durable note',
+      origin: {
+        actor: { _tag: 'Human', userId: 'test-user' },
+        at: DateTime.makeUnsafe(new Date('2026-01-01T00:00:00.000Z')),
+      },
+    })
+
+    expect(calls[0]?.options?.awaitDurability).toBe(true)
+  }),
+)
+
+it.effect('fails malformed stored mention spans in the error channel', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const brain = yield* testBrain(
+      () => ({
+        root_item: [itemRow(1, 'Root')],
+        hop_1_items: [],
+        hop_1_edges: [
+          {
+            id: 90,
+            from: 1,
+            to: 1,
+            edge: EDGES.mentions,
+            workspace_id: tenantId,
+            origin: storedOrigin,
+            mention_text: 'Alice',
+            mention_span_start: 10,
+            mention_span_end: 5,
+          },
+        ],
+      }),
+      calls,
+    )
+
+    const exit = yield* Effect.exit(
+      brain.neighborhood({ tenantId, itemId: ItemId.make('1') }),
+    )
+
+    expect(exit._tag).toBe('Failure')
+  }),
+)
+
+it.effect('fails when the embedding service omits a requested vector', () =>
+  Effect.gen(function* () {
+    const calls: HelixCall[] = []
+    const brain = yield* testBrain(() => ({}), calls)
+
+    const exit = yield* Effect.exit(
+      brain.addText({
+        tenantId,
+        label: 'Missing vector',
+        body: 'Body',
+        actor: { _tag: 'Human', userId: 'test-user' },
+      }),
+    )
+
+    expect(exit._tag).toBe('Failure')
+    expect(calls).toHaveLength(0)
   }),
 )

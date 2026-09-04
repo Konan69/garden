@@ -37,7 +37,8 @@ vi.mock('@garden/app-state/platform/rpc', () => ({
 }))
 
 vi.mock('@garden/agent-runtime', () => ({
-  buildContentDisposition: () => 'inline',
+  buildContentDisposition: (disposition: 'attachment' | 'inline') =>
+    disposition,
   normalizeDownloadFilename: (name: string) => name,
 }))
 
@@ -310,6 +311,7 @@ function storeBrainFile({
   indexed,
   indexStatus,
   itemId = 'item-status',
+  label = 'notes.txt',
   r2Key = 'brain-files/ws-status/notes.txt',
   workspaceId = 'ws-status',
   body,
@@ -317,6 +319,7 @@ function storeBrainFile({
   indexed: boolean
   indexStatus?: BrainItem['indexStatus']
   itemId?: string
+  label?: string
   r2Key?: string | undefined
   workspaceId?: string
   body?: string
@@ -325,7 +328,7 @@ function storeBrainFile({
     id: ItemId.make(itemId),
     tenantId: WorkspaceId.make(workspaceId),
     kind: Kind.make('file'),
-    label: 'notes.txt',
+    label,
     ...(r2Key === undefined ? {} : { r2Key }),
     indexed,
     ...(indexStatus === undefined ? {} : { indexStatus }),
@@ -370,6 +373,7 @@ async function getFileStatus({
   })
 }
 
+/** Runs the retry route with one workspace-scoped mocked Brain file. */
 async function retryFile({
   itemId = 'item-status',
   workspaceId = 'ws-status',
@@ -408,6 +412,7 @@ async function retryFile({
   return { deferred, response }
 }
 
+/** Runs the delete route with mocked Brain and R2 state. */
 async function deleteFile({
   files = makeFiles(),
   itemId = 'item-status',
@@ -440,13 +445,18 @@ async function deleteFile({
   return { files, response }
 }
 
+/** Runs the content route with configurable workspace and R2 object metadata. */
 async function getFileContent({
+  download = false,
   itemId = 'item-status',
   objectBody = 'Garden notes',
+  storedContentType = 'text/plain',
   workspaceId = 'ws-status',
 }: {
+  download?: boolean
   itemId?: string
   objectBody?: string | null
+  storedContentType?: string
   workspaceId?: string
 } = {}) {
   const get = vi.fn(async () => {
@@ -456,7 +466,7 @@ async function getFileContent({
       body: new Response(objectBody).body,
       httpEtag: '"brain-file-etag"',
       writeHttpMetadata: (headers: Headers) => {
-        headers.set('Content-Type', 'text/plain')
+        headers.set('Content-Type', storedContentType)
       },
     }
   })
@@ -479,7 +489,7 @@ async function getFileContent({
   const response = await getBrainFileContent({
     context: {} as AppRequestContext,
     request: new Request(
-      `https://garden.test/api/brain/files/${itemId}/content`,
+      `https://garden.test/api/brain/files/${itemId}/content${download ? '?download' : ''}`,
     ),
     params: { id: itemId },
   })
@@ -487,6 +497,7 @@ async function getFileContent({
   return { get, response }
 }
 
+/** Runs the extracted-text route with one mocked workspace file. */
 async function getFileExtractedText({
   itemId = 'item-status',
   workspaceId = 'ws-status',
@@ -517,6 +528,7 @@ async function getFileExtractedText({
   })
 }
 
+/** Runs the list route for the supplied mocked active workspace. */
 async function getFiles(workspaceId = 'ws-status') {
   const { bucket } = makeFiles()
 
@@ -642,6 +654,22 @@ describe('POST /api/brain/files', () => {
     expect(objects.size).toBe(0)
   })
 
+  it('hides storage failures behind a service response', async () => {
+    const files = makeFiles()
+    files.bucket.put = vi.fn().mockRejectedValue(new Error('private R2 detail'))
+
+    const { response } = await upload({
+      filename: 'helixdb.pdf',
+      type: 'application/pdf',
+      files,
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'Brain upload is unavailable',
+    })
+  })
+
   it.each([
     {
       order: 'before',
@@ -740,6 +768,13 @@ describe('GET /api/brain/files/$id', () => {
 
     expect(response.status).toBe(404)
   })
+
+  it('rejects an empty file id', async () => {
+    const response = await getFileStatus({ itemId: '' })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid Brain file id' })
+  })
 })
 
 describe('POST /api/brain/files/$id', () => {
@@ -789,6 +824,13 @@ describe('POST /api/brain/files/$id', () => {
     expect(response.status).toBe(404)
     expect(deferred).toHaveLength(0)
   })
+
+  it('rejects an empty file id', async () => {
+    const { deferred, response } = await retryFile({ itemId: '' })
+
+    expect(response.status).toBe(400)
+    expect(deferred).toHaveLength(0)
+  })
 })
 
 describe('DELETE /api/brain/files/$id', () => {
@@ -827,6 +869,12 @@ describe('DELETE /api/brain/files/$id', () => {
     expect(mockBrainItems.has(item.id)).toBe(true)
     expect(files.objects.has(item.r2Key as string)).toBe(true)
   })
+
+  it('rejects an empty file id', async () => {
+    const { response } = await deleteFile({ itemId: '' })
+
+    expect(response.status).toBe(400)
+  })
 })
 
 describe('GET /api/brain/files/$id/content', () => {
@@ -842,11 +890,37 @@ describe('GET /api/brain/files/$id/content', () => {
 
     expect(response.status).toBe(200)
     expect(get).toHaveBeenCalledWith(item.r2Key)
-    expect(response.headers.get('Content-Type')).toBe('text/plain')
+    expect(response.headers.get('Content-Type')).toBe(
+      'text/plain; charset=utf-8',
+    )
     expect(response.headers.get('Content-Disposition')).toBe('inline')
     expect(response.headers.get('ETag')).toBe('"brain-file-etag"')
-    expect(response.headers.get('Cache-Control')).toBe('private, max-age=3600')
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     expect(await response.text()).toBe('Garden notes')
+  })
+
+  it('does not trust uploader-controlled R2 content metadata', async () => {
+    storeBrainFile({ indexed: true })
+
+    const { response } = await getFileContent({
+      storedContentType: 'text/html; charset=utf-8',
+    })
+
+    expect(response.headers.get('Content-Type')).toBe(
+      'text/plain; charset=utf-8',
+    )
+    expect(response.headers.get('Content-Disposition')).toBe('inline')
+  })
+
+  it('forces office documents to download', async () => {
+    storeBrainFile({ indexed: true, label: 'quarterly-report.docx' })
+
+    const { response } = await getFileContent()
+
+    expect(response.headers.get('Content-Type')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    expect(response.headers.get('Content-Disposition')).toContain('attachment')
   })
 
   it('does not read content from another workspace', async () => {
@@ -871,6 +945,13 @@ describe('GET /api/brain/files/$id/content', () => {
     })
 
     expect(response.status).toBe(404)
+  })
+
+  it('rejects an empty file id before reading R2', async () => {
+    const { get, response } = await getFileContent({ itemId: '' })
+
+    expect(response.status).toBe(400)
+    expect(get).not.toHaveBeenCalled()
   })
 })
 

@@ -6,6 +6,12 @@ import { WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
 import { formatOf } from '@garden/brain/services/extractor'
+import { createGardenLogger, errorFields } from '@garden/observability/logger'
+import {
+  BrainFileListResponseSchema,
+  BrainFileResponseSchema,
+  brainFileStatusOf,
+} from '@/features/brain/contract'
 import {
   requireAppRequestContext,
   type AppRequestContext,
@@ -18,6 +24,11 @@ import {
   BrainFileIngestionError,
   makeBrainFileIngestionLayer,
 } from '@/lib/server/brain-file-ingestion'
+
+const brainFilesLogger = createGardenLogger({
+  service: 'garden-staging',
+  component: 'brain-files-api',
+})
 
 function brainStorageKey(input: {
   workspaceId: string
@@ -80,20 +91,19 @@ export const getBrainFiles = async ({
     )
   }
 
-  return Response.json(
-    {
-      items: listResult.success.map((item) => ({
-        id: item.id,
-        name: item.label,
-        status: item.indexStatus ?? (item.indexed ? 'ready' : 'processing'),
-      })),
+  const body = BrainFileListResponseSchema.parse({
+    items: listResult.success.map((item) => ({
+      id: item.id,
+      name: item.label,
+      status: brainFileStatusOf(item),
+    })),
+  })
+
+  return Response.json(body, {
+    headers: {
+      'Cache-Control': 'no-store',
     },
-    {
-      headers: {
-        'Cache-Control': 'no-store',
-      },
-    },
-  )
+  })
 }
 
 /**
@@ -176,7 +186,15 @@ export const postBrainFileUpload = async ({
     ),
   )
   if (EffectResult.isFailure(stageResult)) {
-    return badRequest(stageResult.failure.message)
+    brainFilesLogger.error('brain file staging failed', {
+      operation: stageResult.failure.operation,
+      workspaceId: workspaceContext.workspaceId,
+      ...errorFields(stageResult.failure),
+    })
+    return Response.json(
+      { error: 'Brain upload is unavailable' },
+      { status: 503 },
+    )
   }
   const added = stageResult.success
 
@@ -195,16 +213,15 @@ export const postBrainFileUpload = async ({
     )
   }
 
-  return Response.json(
-    {
-      item: {
-        id: added.id,
-        name: added.label,
-        status: added.indexStatus ?? (added.indexed ? 'ready' : 'processing'),
-      },
+  const body = BrainFileResponseSchema.parse({
+    item: {
+      id: added.id,
+      name: added.label,
+      status: brainFileStatusOf(added),
     },
-    { status: 201 },
-  )
+  })
+
+  return Response.json(body, { status: 201 })
 }
 
 export const Route = createFileRoute('/api/brain/files')({

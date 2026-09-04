@@ -4,6 +4,8 @@ import { buildContentDisposition } from '@garden/agent-runtime'
 import { ItemId, WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
+import { formatOf, type FileFormat } from '@garden/brain/services/extractor'
+import { BrainFileIdSchema } from '@/features/brain/contract'
 import {
   requireAppRequestContext,
   type AppRequestContext,
@@ -14,6 +16,30 @@ import {
   requireWorkspaceContext,
 } from '@/lib/server/control-plane'
 import type { AppEnv } from '@/lib/server/env'
+
+const CONTENT_TYPES: Record<FileFormat, string> = {
+  markdown: 'text/plain; charset=utf-8',
+  text: 'text/plain; charset=utf-8',
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+
+/** Returns fixed response metadata from the validated file extension. */
+function responseMetadataFor(filename: string): {
+  contentType: string
+  inlineSafe: boolean
+} {
+  const format = formatOf(filename)
+  if (format === null) {
+    return { contentType: 'application/octet-stream', inlineSafe: false }
+  }
+
+  return {
+    contentType: CONTENT_TYPES[format],
+    inlineSafe: format === 'text' || format === 'markdown' || format === 'pdf',
+  }
+}
 
 /**
  * Streams a private Brain file after Brain verifies that the item belongs to
@@ -35,6 +61,8 @@ export const getBrainFileContent = async ({
   const appContext = requireAppRequestContext(context)
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
+  const itemIdResult = BrainFileIdSchema.safeParse(params.id)
+  if (!itemIdResult.success) return badRequest('Invalid Brain file id')
 
   const env = appContext.env as AppEnv & {
     HELIX_URL?: string
@@ -57,7 +85,7 @@ export const getBrainFileContent = async ({
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
         brain.readFileItem(
-          ItemId.make(params.id),
+          ItemId.make(itemIdResult.data),
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
       ).pipe(Effect.provide(brainLive)),
@@ -94,15 +122,19 @@ export const getBrainFileContent = async ({
   if (object === null) return notFound('Brain file content not found')
 
   const download = new URL(request.url).searchParams.has('download')
+  const metadata = responseMetadataFor(item.label)
   const headers = new Headers()
 
-  object.writeHttpMetadata(headers)
+  headers.set('Content-Type', metadata.contentType)
   headers.set(
     'Content-Disposition',
-    buildContentDisposition(download ? 'attachment' : 'inline', item.label),
+    buildContentDisposition(
+      download || !metadata.inlineSafe ? 'attachment' : 'inline',
+      item.label,
+    ),
   )
   headers.set('ETag', object.httpEtag)
-  headers.set('Cache-Control', 'private, max-age=3600')
+  headers.set('Cache-Control', 'private, no-store')
   headers.set('X-Content-Type-Options', 'nosniff')
 
   return new Response(object.body, { headers })

@@ -76,6 +76,10 @@ describe('splitHeadings', () => {
     expect(chunks[0]?.body).toContain('Context that applies to every section.')
     expect(chunks[1]?.body).toContain('section body')
   })
+
+  it('returns no heading sections for heading-free text', () => {
+    expect(splitHeadings('Plain text without a heading.')).toEqual([])
+  })
 })
 
 describe('chunkBySize', () => {
@@ -118,6 +122,23 @@ describe('chunkBySize', () => {
       true,
     )
   })
+
+  it('bounds overlap for one long unbroken token', () => {
+    const chunks = chunkBySize('x'.repeat(250), {
+      size: 100,
+      overlap: 10,
+    })
+
+    expect(chunks.length).toBeGreaterThan(2)
+    expect(chunks.every((chunk) => chunk.body.length <= 100)).toBe(true)
+  })
+
+  it('preserves one long unbroken token when overlap is disabled', () => {
+    const body = 'x'.repeat(250)
+    const chunks = chunkBySize(body, { size: 100, overlap: 0 })
+
+    expect(chunks.map((chunk) => chunk.body).join('')).toBe(body)
+  })
 })
 
 describe('chunkForFormat', () => {
@@ -155,5 +176,6 @@ describe('chunkForFormat', () => {
     )
     expect(chunks.length).toBeGreaterThan(1)
     expect(chunks.every((chunk) => chunk.body.length <= 60)).toBe(true)
+    expect(chunks[0]?.title).toBe('Part 1')
   })
 })

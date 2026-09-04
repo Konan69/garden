@@ -1,6 +1,6 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import { Context, Effect, Layer, ManagedRuntime, Schema } from 'effect'
+import { Context, Effect, Layer, Schema } from 'effect'
 import { ItemId, Kind, WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
 import type { BrainShape } from '@garden/brain/services/brain'
@@ -447,7 +447,7 @@ const makeBrainToolsService = (
   })
 }
 
-/** Provides one warm Effect runtime for all Brain tool callbacks in a turn. */
+/** Provides the Brain tool service for one Effect-backed tool execution. */
 const makeBrainToolsLayer = (
   deps: BrainToolDependencies,
 ): Layer.Layer<BrainToolsService> => {
@@ -478,13 +478,15 @@ const makeBrainToolsLayer = (
  * the service layer, with Promise conversion limited to AI SDK callbacks.
  */
 export function createBrainTools(deps: BrainToolDependencies): ToolSet {
-  const runtime = ManagedRuntime.make(makeBrainToolsLayer(deps))
+  const layer = makeBrainToolsLayer(deps)
   const runService = (
     operation: (
       service: BrainToolsServiceShape,
     ) => Effect.Effect<BrainToolOutput>,
   ): Promise<BrainToolOutput> =>
-    runtime.runPromise(Effect.flatMap(BrainToolsService, operation))
+    Effect.runPromise(
+      Effect.flatMap(BrainToolsService, operation).pipe(Effect.provide(layer)),
+    )
 
   return {
     brain_search: tool({

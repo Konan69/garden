@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { ItemId, WorkspaceId } from '@garden/brain/domain'
 import { Brain } from '@garden/brain/services/brain'
 import { makeWebBrainLive } from '@garden/brain/services/web'
+import { BrainFileIdSchema } from '@/features/brain/contract'
 import {
   requireAppRequestContext,
   type AppRequestContext,
@@ -28,6 +29,8 @@ export const getBrainFileExtractedText = async ({
   const appContext = requireAppRequestContext(context)
   const workspaceContext = await requireWorkspaceContext(appContext)
   if (workspaceContext instanceof Response) return workspaceContext
+  const itemIdResult = BrainFileIdSchema.safeParse(params.id)
+  if (!itemIdResult.success) return badRequest('Invalid Brain file id')
 
   const env = appContext.env as AppEnv & {
     HELIX_URL?: string
@@ -50,7 +53,7 @@ export const getBrainFileExtractedText = async ({
     Effect.result(
       Effect.flatMap(Brain, (brain) =>
         brain.readFileItem(
-          ItemId.make(params.id),
+          ItemId.make(itemIdResult.data),
           WorkspaceId.make(workspaceContext.workspaceId),
         ),
       ).pipe(Effect.provide(brainLive)),

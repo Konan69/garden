@@ -122,6 +122,18 @@ describe('getBrainFile', () => {
       }),
     )
   })
+
+  it('rejects a malformed file status response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        item: { id: 'brain-file-1', name: 'notes.txt', status: 'unknown' },
+      }),
+    )
+
+    configureApi('https://garden.test')
+
+    await expect(getBrainFile('brain-file-1')).rejects.toThrow()
+  })
 })
 
 describe('retryBrainFile', () => {
@@ -187,6 +199,23 @@ describe('listBrainFiles', () => {
       expect.objectContaining({
         credentials: 'include',
       }),
+    )
+  })
+
+  it('forwards cancellation and rejects malformed list data', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        items: [{ id: '', name: 'notes.txt', status: 'ready' }],
+      }),
+    )
+
+    configureApi('https://garden.test')
+
+    await expect(listBrainFiles(controller.signal)).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://garden.test/api/brain/files',
+      expect.objectContaining({ signal: controller.signal }),
     )
   })
 })

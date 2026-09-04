@@ -62,13 +62,6 @@ export const splitHeadings = (
     }
   }
   if (current !== null) sections.push(current)
-  if (preamble !== '') {
-    sections.unshift({
-      title: rootTitle ?? 'Preamble',
-      body: preamble,
-      path: rootTitle ?? 'Preamble',
-    })
-  }
   return sections.flatMap((section) => {
     const combined = breadcrumbBody(section.path, section.body)
     if (combined.length <= size) {
@@ -103,12 +96,13 @@ const chunkBody = (body: string): readonly string[] => {
 }
 
 const takeTail = (text: string, overlap: number): string => {
+  if (overlap === 0) return ''
   const words = text.split(/\s+/)
   let tail = ''
   for (let i = words.length - 1; i >= 0 && tail.length < overlap; i--) {
     tail = `${words[i]} ${tail}`.trim()
   }
-  return tail
+  return tail.length <= overlap ? tail : tail.slice(-overlap)
 }
 
 /**

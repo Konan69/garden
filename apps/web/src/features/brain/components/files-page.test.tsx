@@ -423,6 +423,37 @@ describe('BrainFilesPage', () => {
     expect(mockGetBrainFileBytes).toHaveBeenCalledWith('stored-pdf-1')
   })
 
+  it('shows an unexpected PDF render failure', async () => {
+    const user = userEvent.setup()
+    const renderError = new Error('Canvas failed')
+    renderError.name = 'PDFRenderError'
+    mockPdfGetDocument.mockReturnValueOnce({
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: vi.fn().mockResolvedValue({
+          getViewport: () => ({ width: 600, height: 800 }),
+          render: () => ({
+            promise: Promise.reject(renderError),
+            cancel: vi.fn(),
+          }),
+        }),
+      }),
+    })
+
+    renderFilesPage([
+      { id: 'stored-pdf-1', name: 'report.pdf', status: 'ready' },
+    ])
+    await user.click(
+      await screen.findByRole('button', { name: 'Preview report.pdf' }),
+    )
+
+    expect(
+      (await screen.findAllByRole('alert')).some((alert) =>
+        alert.textContent?.includes('Could not render page 1.'),
+      ),
+    ).toBe(true)
+  })
+
   it('shows extracted DOCX content in the preview', async () => {
     const user = userEvent.setup()
 
@@ -491,6 +522,12 @@ describe('BrainFilesPage', () => {
     expect(
       within(dialog).getByRole('table', { name: 'Revenue' }),
     ).toBeInTheDocument()
+    const revenueTab = within(sheetNavigation).getByRole('tab', {
+      name: 'Revenue',
+    })
+    const revenuePanel = within(dialog).getByRole('tabpanel')
+    expect(revenueTab).toHaveAttribute('aria-controls', revenuePanel.id)
+    expect(revenuePanel).toHaveAttribute('aria-labelledby', revenueTab.id)
     expect(within(dialog).getByText('January')).toBeInTheDocument()
     expect(within(dialog).getByText('1000')).toBeInTheDocument()
 
@@ -503,6 +540,46 @@ describe('BrainFilesPage', () => {
     ).toBeInTheDocument()
     expect(within(dialog).getByText('Hosting')).toBeInTheDocument()
     expect(mockGetBrainFileExtractedText).toHaveBeenCalledWith('stored-xlsx-1')
+  })
+
+  it('keeps an uploaded file when an older list request resolves late', async () => {
+    const user = userEvent.setup()
+    const file = new File(['Garden notes'], 'notes.txt', {
+      type: 'text/plain',
+    })
+    let resolveFirstList: ((files: BrainFileSummary[]) => void) | undefined
+
+    mockListBrainFiles
+      .mockImplementationOnce(
+        () =>
+          new Promise<BrainFileSummary[]>((resolve) => {
+            resolveFirstList = resolve
+          }),
+      )
+      .mockResolvedValue([
+        { id: 'brain-file-1', name: 'notes.txt', status: 'processing' },
+      ])
+    mockUploadBrainFile.mockResolvedValue({
+      id: 'brain-file-1',
+      name: 'notes.txt',
+      status: 'processing',
+    })
+
+    renderFilesPage()
+    await user.upload(
+      screen.getByLabelText('Choose a document to upload'),
+      file,
+    )
+    await confirmSelectedFile(user)
+
+    expect(await screen.findByText('notes.txt')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveFirstList?.([])
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('notes.txt')).toBeInTheDocument()
   })
 
   it('uses the designed upload and file tile dimensions', async () => {

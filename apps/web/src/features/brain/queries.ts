@@ -5,8 +5,7 @@ import {
   getBrainFileExtractedText,
   listBrainFiles,
 } from './api'
-
-const FILE_LIST_POLL_INTERVAL_MS = 2_000
+import { BRAIN_FILE_POLLING_POLICY } from './policy'
 
 export const brainFileKeys = {
   all: ['brain', 'files'] as const,
@@ -27,7 +26,7 @@ export function brainFileListOptions(sessionUploadIds: readonly string[] = []) {
 
   return queryOptions({
     queryKey: brainFileKeys.list(),
-    queryFn: listBrainFiles,
+    queryFn: ({ signal }) => listBrainFiles(signal),
     retry: false,
     refetchInterval: (query) => {
       if (query.state.error !== null || sessionUploadIdSet.size === 0) {
@@ -39,7 +38,7 @@ export function brainFileListOptions(sessionUploadIds: readonly string[] = []) {
           sessionUploadIdSet.has(file.id) && file.status === 'processing',
       )
 
-      return hasProcessingUpload ? FILE_LIST_POLL_INTERVAL_MS : false
+      return hasProcessingUpload ? BRAIN_FILE_POLLING_POLICY.intervalMs : false
     },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
