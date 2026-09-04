@@ -3,10 +3,10 @@ import { LoginPage } from '@/features/auth'
 import { sanitizeRedirectTarget } from '@/lib/redirect'
 import { getRouteSession } from '@/lib/server/route-session'
 import {
-  getSignupInvitationPreview,
   invitationIdFromRedirect,
   type SignupInvitationPreview,
-} from '@/lib/server/invitations'
+} from '@/lib/invitation-flow'
+import { getSignupInvitationPreview } from '@/lib/server/invitations'
 
 export const Route = createFileRoute('/login')({
   validateSearch: (search) => ({
@@ -58,6 +58,7 @@ function LoginRoute() {
       invitationWorkspaceName={
         invitationIsPending ? invitation.organizationName : undefined
       }
+      redirectTarget={search.redirect}
       onSuccess={() =>
         void navigate({ href: search.redirect ?? '/workspace', replace: true })
       }

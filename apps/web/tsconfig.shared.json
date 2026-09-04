@@ -4,7 +4,8 @@
     "src/lib/api/document-artifact-contract.ts",
     "src/lib/api/garden-api-contract.ts",
     "src/lib/api/skills-contract.ts",
-    "src/lib/executor-contract.ts"
+    "src/lib/executor-contract.ts",
+    "src/lib/invitation-flow.ts"
   ],
   "compilerOptions": {
     "composite": true,

@@ -3,10 +3,10 @@ import { LoginPage } from '@/features/auth'
 import { sanitizeRedirectTarget } from '@/lib/redirect'
 import { getRouteSession } from '@/lib/server/route-session'
 import {
-  getSignupInvitationPreview,
   invitationIdFromRedirect,
   type SignupInvitationPreview,
-} from '@/lib/server/invitations'
+} from '@/lib/invitation-flow'
+import { getSignupInvitationPreview } from '@/lib/server/invitations'
 
 export const Route = createFileRoute('/signup')({
   validateSearch: (search) => ({

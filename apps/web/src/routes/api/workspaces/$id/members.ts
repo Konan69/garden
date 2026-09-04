@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { createFileRoute } from '@tanstack/react-router'
 import { Result, TaggedError } from 'better-result'
 import { createLogger } from '@garden/observability/console'
@@ -40,7 +40,7 @@ type AuthInvitation = {
   email: string
   role?: string
   status: string
-  createdAt: Date
+  createdAt?: Date | null
   expiresAt: Date
 }
 
@@ -163,6 +163,57 @@ export const Route = createFileRoute('/api/workspaces/$id/members')({
             )
           }
           const body = bodyResult.value
+          const db = await appContext.db()
+
+          /**
+           * Resend path: refresh the existing pending row in place. Better
+           * Auth's own `resend` flag cannot be used here — its
+           * findPendingInvitation filters out expired invites (adapter.mjs),
+           * so resending an expired invite would silently create a duplicate
+           * row and orphan the original. Garden owns the mutation instead:
+           * same effect as Better Auth's resend (extends expiresAt by the
+           * default 48h window), but covering expired rows too.
+           */
+          if (body.resend) {
+            const [existing] = await db
+              .select()
+              .from(schema.invitation)
+              .where(
+                and(
+                  eq(schema.invitation.organizationId, params.id),
+                  sql`lower(${schema.invitation.email}) = lower(${body.email})`,
+                  eq(schema.invitation.status, 'pending'),
+                ),
+              )
+              .limit(1)
+
+            if (existing) {
+              // Mirrors Better Auth's invitationExpiresIn default (48h).
+              const refreshedExpiry = new Date(Date.now() + 48 * 3600 * 1000)
+              await db
+                .update(schema.invitation)
+                .set({ expiresAt: refreshedExpiry })
+                .where(eq(schema.invitation.id, existing.id))
+
+              const refreshed = { ...existing, expiresAt: refreshedExpiry }
+              const resendEmailResult = await sendInvitationForRoute({
+                baseURL: new URL(request.url).origin,
+                db,
+                env: appContext.env,
+                invitation: refreshed,
+                inviter: {
+                  email: session.user.email,
+                  name: session.user.name,
+                },
+              })
+              if (resendEmailResult.isErr()) {
+                return Result.err(resendEmailResult.error)
+              }
+
+              return Result.ok(toInvitation(refreshed))
+            }
+          }
+
           const invitation = yield* Result.await(
             Result.tryPromise({
               try: async () =>
@@ -196,6 +247,9 @@ export const Route = createFileRoute('/api/workspaces/$id/members')({
           })
 
           if (emailResult.isErr()) {
+            // Cancel only invites this request created. The resend path
+            // returned above before reaching here, so every invitation at
+            // this point is newly created.
             const cancelResult = await Result.tryPromise({
               try: async () => {
                 await auth.api.cancelInvitation({

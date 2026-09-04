@@ -1,20 +1,20 @@
-import { Effect, Result as EffectResult } from 'effect'
-import { betterAuth } from 'better-auth'
-import { createAuthMiddleware, getOAuthState } from 'better-auth/api'
-import { Result, matchError } from 'better-result'
-import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { and, eq } from 'drizzle-orm'
-import { createAccessControl } from 'better-auth/plugins/access'
-import { defaultStatements } from 'better-auth/plugins/organization/access'
-import { organization } from 'better-auth/plugins'
-import { genericOAuth } from 'better-auth/plugins/generic-oauth'
-import { connectorRegistry } from '@garden/connectors'
-import { GARDEN_ANALYTICS_EVENTS } from '@garden/observability/analytics/events'
-import { buildConnectorOAuthConfigs } from '@garden/connectors/oauth'
+import { Effect, Result as EffectResult } from "effect";
+import { betterAuth } from "better-auth";
+import { createAuthMiddleware, getOAuthState } from "better-auth/api";
+import { Result, matchError } from "better-result";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { and, eq } from "drizzle-orm";
+import { createAccessControl } from "better-auth/plugins/access";
+import { defaultStatements } from "better-auth/plugins/organization/access";
+import { organization } from "better-auth/plugins";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { connectorRegistry } from "@garden/connectors";
+import { GARDEN_ANALYTICS_EVENTS } from "@garden/observability/analytics/events";
+import { buildConnectorOAuthConfigs } from "@garden/connectors/oauth";
 import {
   createGardenLogger,
   type GardenLogLevel,
-} from '@garden/observability/logger'
+} from "@garden/observability/logger";
 import {
   account,
   invitation,
@@ -23,66 +23,66 @@ import {
   session,
   user,
   verification,
-} from '@garden/db/schema'
+} from "@garden/db/schema";
 import {
   syncCapabilities,
   type CapabilitySyncError,
-} from '@/lib/server/capability-sync'
+} from "@/lib/server/capability-sync";
 import {
   ConnectorCallbackDatabaseError,
   recordConnectorCallbackEvent,
   type ConnectorCallbackStatus,
-} from '@/lib/server/connector-callback-events'
-import type { AppEnv } from '@/lib/server/env'
+} from "@/lib/server/connector-callback-events";
+import type { AppEnv } from "@/lib/server/env";
 import {
   capturePostHogEventWithScheduler,
   capturePostHogHandledErrorWithScheduler,
-} from '@/lib/posthog-server'
-import type { Db } from '@/lib/server/db'
-import { sendPasswordResetEmail } from '@/lib/server/email/password-reset'
+} from "@/lib/posthog-server";
+import type { Db } from "@/lib/server/db";
+import { sendPasswordResetEmail } from "@/lib/server/email/password-reset";
 
 export type GardenAuthEnv = Pick<
   AppEnv,
-  | 'BETTER_AUTH_SECRET'
-  | 'BETTER_AUTH_URL'
-  | 'GITHUB_CLIENT_ID'
-  | 'GITHUB_CLIENT_SECRET'
-  | 'GOOGLE_CLIENT_ID'
-  | 'GOOGLE_CLIENT_SECRET'
-  | 'SLACK_CLIENT_ID'
-  | 'SLACK_CLIENT_SECRET'
-  | 'RESEND_API_KEY'
-  | 'ENVIRONMENT'
-  | 'VITE_PUBLIC_POSTHOG_HOST'
-  | 'VITE_PUBLIC_POSTHOG_PROJECT_TOKEN'
->
+  | "BETTER_AUTH_SECRET"
+  | "BETTER_AUTH_URL"
+  | "GITHUB_CLIENT_ID"
+  | "GITHUB_CLIENT_SECRET"
+  | "GOOGLE_CLIENT_ID"
+  | "GOOGLE_CLIENT_SECRET"
+  | "SLACK_CLIENT_ID"
+  | "SLACK_CLIENT_SECRET"
+  | "RESEND_API_KEY"
+  | "ENVIRONMENT"
+  | "VITE_PUBLIC_POSTHOG_HOST"
+  | "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN"
+>;
 
 type GardenAuthRuntime = GardenAuthEnv & {
-  request?: Request
-  waitUntil?: (promise: Promise<unknown>) => void
-}
+  request?: Request;
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
 
-type AuthDatabase = Db
-type AccountRecord = typeof account.$inferInsert
+type AuthDatabase = Db;
+type AccountRecord = typeof account.$inferInsert;
 type HookSession = {
   session: {
-    activeOrganizationId?: string | null
-  }
+    activeOrganizationId?: string | null;
+  };
   user: {
-    id: string
-  }
-}
+    id: string;
+  };
+};
 type HookContext = {
-  params?: Record<string, unknown>
-  path?: string
+  params?: Record<string, unknown>;
+  path?: string;
   context: {
     logger: {
-      error: (...args: unknown[]) => void
-    }
-    newSession: HookSession | null
-    session: HookSession | null
-  }
-} | null
+      error: (...args: unknown[]) => void;
+    };
+    newSession: HookSession | null;
+    session: HookSession | null;
+  };
+} | null;
 
 const authSchema = {
   user,
@@ -92,12 +92,12 @@ const authSchema = {
   organization: organizationTable,
   member: memberTable,
   invitation,
-}
+};
 
 const betterAuthLogger = createGardenLogger({
-  service: 'garden-staging',
-  component: 'better-auth',
-})
+  service: "garden-staging",
+  component: "better-auth",
+});
 
 /**
  * Replaces Better Auth's default console logger with Garden's redacting error
@@ -108,115 +108,115 @@ const betterAuthLogger = createGardenLogger({
  * logger option source and local Cloudflare Workers structured logging helper.
  */
 function logBetterAuthError(
-  level: Exclude<GardenLogLevel, 'success'>,
+  level: Exclude<GardenLogLevel, "success">,
   message: string,
   ...args: unknown[]
 ) {
-  if (level !== 'error') return
-  betterAuthLogger.error('better_auth.error', {
+  if (level !== "error") return;
+  betterAuthLogger.error("better_auth.error", {
     betterAuthMessage: message,
     ...(args.length > 0 ? { betterAuthArgs: args } : {}),
-  })
+  });
 }
 
 const gardenAccessControl = createAccessControl({
   ...defaultStatements,
-  agent: ['create', 'update', 'delete'],
-  connection: ['update'],
-  issue: ['update'],
-  permission: ['approve', 'grant'],
-  skill: ['create', 'update', 'delete'],
-})
+  agent: ["create", "update", "delete"],
+  connection: ["update"],
+  issue: ["update"],
+  permission: ["approve", "grant"],
+  skill: ["create", "update", "delete"],
+});
 
 const gardenOwnerRole = gardenAccessControl.newRole({
   ...defaultStatements,
-  agent: ['create', 'update', 'delete'],
-  connection: ['update'],
-  issue: ['update'],
-  permission: ['approve', 'grant'],
-  skill: ['create', 'update', 'delete'],
-})
+  agent: ["create", "update", "delete"],
+  connection: ["update"],
+  issue: ["update"],
+  permission: ["approve", "grant"],
+  skill: ["create", "update", "delete"],
+});
 
 const gardenAdminRole = gardenAccessControl.newRole({
-  organization: ['update'],
-  member: ['create', 'update', 'delete'],
-  invitation: ['create', 'cancel'],
-  team: ['create', 'update', 'delete'],
-  ac: ['create', 'read', 'update', 'delete'],
-  agent: ['create', 'update', 'delete'],
-  connection: ['update'],
-  issue: ['update'],
-  permission: ['approve', 'grant'],
-  skill: ['create', 'update', 'delete'],
-})
+  organization: ["update"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  team: ["create", "update", "delete"],
+  ac: ["create", "read", "update", "delete"],
+  agent: ["create", "update", "delete"],
+  connection: ["update"],
+  issue: ["update"],
+  permission: ["approve", "grant"],
+  skill: ["create", "update", "delete"],
+});
 
 const gardenMemberRole = gardenAccessControl.newRole({
   organization: [],
   member: [],
   invitation: [],
   team: [],
-  ac: ['read'],
+  ac: ["read"],
   agent: [],
   connection: [],
   issue: [],
   permission: [],
   skill: [],
-})
+});
 
 function getConnectorByProviderId(providerId: string | null | undefined) {
   return connectorRegistry.find(
     (connector) => connector.oauth?.providerId === providerId,
-  )
+  );
 }
 
 function readHookSession(context: HookContext) {
-  return context?.context.session ?? context?.context.newSession ?? null
+  return context?.context.session ?? context?.context.newSession ?? null;
 }
 
 function readProviderId(
   accountRecord: Partial<AccountRecord>,
   context: HookContext,
 ) {
-  const routeProviderId = context?.params?.providerId
-  if (typeof accountRecord.providerId === 'string') {
-    return accountRecord.providerId
+  const routeProviderId = context?.params?.providerId;
+  if (typeof accountRecord.providerId === "string") {
+    return accountRecord.providerId;
   }
 
-  return typeof routeProviderId === 'string' ? routeProviderId : undefined
+  return typeof routeProviderId === "string" ? routeProviderId : undefined;
 }
 
 function normalizeScopes(scope: string | null | undefined) {
   const scopes = scope
-    ?.split(',')
+    ?.split(",")
     .map((entry) => entry.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 
-  return scopes && scopes.length > 0 ? scopes : undefined
+  return scopes && scopes.length > 0 ? scopes : undefined;
 }
 
 function decorateAccountRecord(
   accountRecord: Partial<AccountRecord>,
   context: HookContext,
 ) {
-  const providerId = readProviderId(accountRecord, context)
-  const connector = getConnectorByProviderId(providerId)
-  if (!connector) return undefined
+  const providerId = readProviderId(accountRecord, context);
+  const connector = getConnectorByProviderId(providerId);
+  if (!connector) return undefined;
 
-  const workspaceId = readHookSession(context)?.session.activeOrganizationId
-  const scopes = normalizeScopes(accountRecord.scope)
+  const workspaceId = readHookSession(context)?.session.activeOrganizationId;
+  const scopes = normalizeScopes(accountRecord.scope);
 
   return {
     ...accountRecord,
     connectorType: connector.id,
-    status: 'connected',
+    status: "connected",
     ...(workspaceId ? { workspaceId } : {}),
     ...(scopes ? { scopes } : {}),
-  }
+  };
 }
 
 function getRequestOrigin(request?: Request) {
-  if (!request || !URL.canParse(request.url)) return null
-  return new URL(request.url).origin
+  if (!request || !URL.canParse(request.url)) return null;
+  return new URL(request.url).origin;
 }
 
 function readOAuthCallbackFlow(
@@ -224,53 +224,53 @@ function readOAuthCallbackFlow(
   baseURL: string,
 ) {
   if (!callbackURL || !URL.canParse(callbackURL, baseURL)) {
-    return { flowId: undefined }
+    return { flowId: undefined };
   }
 
-  const url = new URL(callbackURL, baseURL)
-  const flowId = url.searchParams.get('connector_flow')?.trim() || undefined
-  return { flowId }
+  const url = new URL(callbackURL, baseURL);
+  const flowId = url.searchParams.get("connector_flow")?.trim() || undefined;
+  return { flowId };
 }
 
 type OAuthCallbackOutcome = {
-  status: ConnectorCallbackStatus
-  stage: string
-  message: string
-  errorCode?: string | null
-}
+  status: ConnectorCallbackStatus;
+  stage: string;
+  message: string;
+  errorCode?: string | null;
+};
 
 function syncResultToOAuthOutcome(args: {
-  connectorLabel: string
-  syncError?: CapabilitySyncError
+  connectorLabel: string;
+  syncError?: CapabilitySyncError;
 }): OAuthCallbackOutcome {
   if (args.syncError === undefined) {
     return {
-      status: 'success',
-      stage: 'connected',
+      status: "success",
+      stage: "connected",
       message: `${args.connectorLabel} connected.`,
-    }
+    };
   }
 
   return {
-    status: 'degraded',
+    status: "degraded",
     stage: args.syncError.code,
     message: `${args.connectorLabel} connected. Tool sync needs attention.`,
     errorCode: args.syncError.code,
-  }
+  };
 }
 
 async function markOAuthAccountDegraded(args: {
-  db: AuthDatabase
-  userId: string
-  workspaceId: string
-  providerId: string
+  db: AuthDatabase;
+  userId: string;
+  workspaceId: string;
+  providerId: string;
 }) {
   return Result.tryPromise({
     try: async () => {
       await args.db
         .update(account)
         .set({
-          status: 'degraded',
+          status: "degraded",
           updatedAt: new Date(),
         })
         .where(
@@ -279,18 +279,18 @@ async function markOAuthAccountDegraded(args: {
             eq(account.providerId, args.providerId),
             eq(account.workspaceId, args.workspaceId),
           ),
-        )
+        );
     },
     catch: (cause) =>
       new ConnectorCallbackDatabaseError({
-        operation: 'update',
+        operation: "update",
         cause,
         message:
           cause instanceof Error
             ? cause.message
-            : 'Failed to mark OAuth account as degraded',
+            : "Failed to mark OAuth account as degraded",
       }),
-  })
+  });
 }
 
 /**
@@ -302,28 +302,28 @@ async function markOAuthAccountDegraded(args: {
  * writes and avoids URL/tab state as product state.
  */
 async function finishOAuthConnectorCallback(args: {
-  db: AuthDatabase
-  userId: string
-  workspaceId: string
-  providerId: string
-  connectorId: NonNullable<ReturnType<typeof getConnectorByProviderId>>['id']
-  connectorLabel: string
-  flowId?: string | null
+  db: AuthDatabase;
+  userId: string;
+  workspaceId: string;
+  providerId: string;
+  connectorId: NonNullable<ReturnType<typeof getConnectorByProviderId>>["id"];
+  connectorLabel: string;
+  flowId?: string | null;
 }) {
   return Result.gen(async function* () {
     const syncResult = await Effect.runPromise(
       Effect.result(
         syncCapabilities(args.connectorId, args.userId, args.workspaceId),
       ),
-    )
+    );
     const outcome = syncResultToOAuthOutcome({
       connectorLabel: args.connectorLabel,
       syncError: EffectResult.isFailure(syncResult)
         ? syncResult.failure
         : undefined,
-    })
+    });
 
-    if (outcome.status === 'degraded') {
+    if (outcome.status === "degraded") {
       yield* Result.await(
         markOAuthAccountDegraded({
           db: args.db,
@@ -331,7 +331,7 @@ async function finishOAuthConnectorCallback(args: {
           workspaceId: args.workspaceId,
           providerId: args.providerId,
         }),
-      )
+      );
     }
 
     const event = yield* Result.await(
@@ -342,30 +342,30 @@ async function finishOAuthConnectorCallback(args: {
         connectorId: args.connectorId,
         providerId: args.providerId,
         flowId: args.flowId,
-        source: 'oauth',
+        source: "oauth",
         status: outcome.status,
         stage: outcome.stage,
         message: outcome.message,
         errorCode: outcome.errorCode,
       }),
-    )
+    );
 
-    return Result.ok({ outcome, event })
-  })
+    return Result.ok({ outcome, event });
+  });
 }
 
 export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
-  const runtimeOrigin = getRequestOrigin(env.request)
+  const runtimeOrigin = getRequestOrigin(env.request);
   const baseURL =
-    runtimeOrigin ?? env.BETTER_AUTH_URL ?? 'http://localhost:3000'
+    runtimeOrigin ?? env.BETTER_AUTH_URL ?? "http://localhost:3000";
   const trustedOrigins = Array.from(
     new Set([
-      'http://localhost:3000',
-      'http://localhost:3001',
+      "http://localhost:3000",
+      "http://localhost:3001",
       ...(env.BETTER_AUTH_URL ? [env.BETTER_AUTH_URL] : []),
       ...(runtimeOrigin ? [runtimeOrigin] : []),
     ]),
-  )
+  );
   const oauthEnv = {
     GITHUB_CLIENT_ID: env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: env.GITHUB_CLIENT_SECRET,
@@ -373,24 +373,24 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
     GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
     SLACK_CLIENT_ID: env.SLACK_CLIENT_ID,
     SLACK_CLIENT_SECRET: env.SLACK_CLIENT_SECRET,
-  } satisfies Record<string, string | undefined>
+  } satisfies Record<string, string | undefined>;
 
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
     baseURL,
     trustedOrigins,
     logger: {
-      level: 'error',
+      level: "error",
       log: logBetterAuthError,
     },
     database: drizzleAdapter(db, {
-      provider: 'pg',
+      provider: "pg",
       schema: authSchema,
     }),
     session: {
       cookieCache: {
         enabled: true,
-        strategy: 'compact',
+        strategy: "compact",
       },
     },
     databaseHooks: {
@@ -400,9 +400,9 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
             const decoratedAccount = decorateAccountRecord(
               accountRecord,
               context as HookContext,
-            )
+            );
 
-            return decoratedAccount ? { data: decoratedAccount } : undefined
+            return decoratedAccount ? { data: decoratedAccount } : undefined;
           },
         },
         update: {
@@ -410,9 +410,9 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
             const decoratedAccount = decorateAccountRecord(
               accountRecord,
               context as HookContext,
-            )
+            );
 
-            return decoratedAccount ? { data: decoratedAccount } : undefined
+            return decoratedAccount ? { data: decoratedAccount } : undefined;
           },
         },
       },
@@ -429,17 +429,17 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
             email: resetUser.email,
             name: resetUser.name,
           },
-        })
+        });
       },
     },
     account: {
       encryptOAuthTokens: true,
       updateAccountOnSignIn: true,
       additionalFields: {
-        workspaceId: { type: 'string', required: false, input: false },
-        status: { type: 'string', required: false, input: false },
-        scopes: { type: 'string[]', required: false, input: false },
-        connectorType: { type: 'string', required: false, input: false },
+        workspaceId: { type: "string", required: false, input: false },
+        status: { type: "string", required: false, input: false },
+        scopes: { type: "string[]", required: false, input: false },
+        connectorType: { type: "string", required: false, input: false },
       },
     },
     plugins: [
@@ -453,21 +453,21 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
         schema: {
           session: {
             fields: {
-              activeOrganizationId: 'activeOrganizationId',
+              activeOrganizationId: "activeOrganizationId",
             },
           },
           organization: {
             fields: {
-              createdAt: 'createdAt',
-              logo: 'logo',
-              metadata: 'metadata',
+              createdAt: "createdAt",
+              logo: "logo",
+              metadata: "metadata",
             },
             additionalFields: {
-              description: { type: 'string', required: false, input: true },
-              context: { type: 'string', required: false, input: true },
-              settings: { type: 'json', required: false, input: true },
-              plan: { type: 'string', required: false, input: true },
-              updatedAt: { type: 'date', required: false },
+              description: { type: "string", required: false, input: true },
+              context: { type: "string", required: false, input: true },
+              settings: { type: "json", required: false, input: true },
+              plan: { type: "string", required: false, input: true },
+              updatedAt: { type: "date", required: false },
             },
           },
         },
@@ -478,28 +478,28 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
     ],
     hooks: {
       after: createAuthMiddleware(async (context) => {
-        if (context.path !== '/oauth2/callback/:providerId') {
-          return
+        if (context.path !== "/oauth2/callback/:providerId") {
+          return;
         }
 
         const providerId =
-          typeof context.params?.providerId === 'string'
+          typeof context.params?.providerId === "string"
             ? context.params.providerId
-            : undefined
-        const connector = getConnectorByProviderId(providerId)
-        const session = readHookSession(context as HookContext)
-        const workspaceId = session?.session.activeOrganizationId
-        const userId = session?.user.id
+            : undefined;
+        const connector = getConnectorByProviderId(providerId);
+        const session = readHookSession(context as HookContext);
+        const workspaceId = session?.session.activeOrganizationId;
+        const userId = session?.user.id;
 
         if (!providerId || !connector || !workspaceId || !userId) {
-          return
+          return;
         }
 
-        const oauthState = await getOAuthState()
+        const oauthState = await getOAuthState();
         const { flowId } = readOAuthCallbackFlow(
           oauthState?.callbackURL,
           baseURL,
-        )
+        );
         const result = await finishOAuthConnectorCallback({
           db,
           userId,
@@ -508,7 +508,7 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
           connectorId: connector.id,
           connectorLabel: connector.label,
           flowId,
-        })
+        });
 
         result.match({
           ok: ({ event, outcome }) => {
@@ -523,22 +523,22 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
                   provider_id: providerId,
                   callback_event_id: event.id,
                   flow_id: flowId,
-                  source: 'oauth',
+                  source: "oauth",
                   outcome: outcome.status,
                   stage: outcome.stage,
                   error_code: outcome.errorCode,
                 },
-              })
+              });
             }
 
-            if (outcome.status === 'degraded') {
+            if (outcome.status === "degraded") {
               context.context.logger.error(outcome.message, {
                 connectorId: connector.id,
                 providerId,
                 userId,
                 workspaceId,
                 errorCode: outcome.errorCode,
-              })
+              });
             }
           },
           err: (error) =>
@@ -550,12 +550,12 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
                     workspaceId,
                     error: databaseError,
                     properties: {
-                      operation: 'connector_callback',
+                      operation: "connector_callback",
                       connector_id: connector.id,
                       provider_id: providerId,
-                      stage: 'callback_persistence',
+                      stage: "callback_persistence",
                     },
-                  })
+                  });
                 }
                 context.context.logger.error(
                   databaseError.message,
@@ -566,26 +566,26 @@ export function createBetterAuth(db: AuthDatabase, env: GardenAuthRuntime) {
                     userId,
                     workspaceId,
                   },
-                )
+                );
               },
             }),
-        })
+        });
       }),
     },
     user: {
       fields: {
-        image: 'avatarUrl',
-        emailVerified: 'emailVerified',
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt',
+        image: "avatarUrl",
+        emailVerified: "emailVerified",
+        createdAt: "createdAt",
+        updatedAt: "updatedAt",
       },
     },
     advanced: {
       disableCSRFCheck: false,
       disableOriginCheck: false,
       database: {
-        generateId: () => crypto.randomUUID(),
+        generateId: "uuid",
       },
     },
-  })
+  });
 }

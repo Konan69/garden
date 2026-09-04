@@ -21,6 +21,7 @@ export function LoginPage({
   invitationStatusMessage,
   invitationWorkspaceName,
   lockedEmail = false,
+  redirectTarget,
 }: {
   onSuccess: () => void
   initialEmail?: string
@@ -28,6 +29,11 @@ export function LoginPage({
   invitationStatusMessage?: string
   invitationWorkspaceName?: string
   lockedEmail?: boolean
+  /**
+   * Sanitized post-auth target (usually an invite link). Threaded into the
+   * forgot-password link so the recovery detour returns to the same flow.
+   */
+  redirectTarget?: string
 }) {
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode)
   const [name, setName] = useState('')
@@ -99,8 +105,10 @@ export function LoginPage({
           onSubmit={handleSubmit}
           onNameChange={setName}
           emailReadonly={lockedEmail}
+          modeLocked={lockedEmail}
           invitationStatusMessage={invitationStatusMessage}
           invitationWorkspaceName={invitationWorkspaceName}
+          redirectTarget={redirectTarget}
           onEmailChange={lockedEmail ? () => undefined : setEmail}
           onPasswordChange={setPassword}
           onToggleMode={() =>

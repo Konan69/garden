@@ -34,11 +34,13 @@ export function LoginForm({
   name,
   email,
   emailReadonly,
+  modeLocked = false,
   invitationStatusMessage,
   invitationWorkspaceName,
   password,
   error,
   loading,
+  redirectTarget,
   onSubmit,
   onNameChange,
   onEmailChange,
@@ -49,11 +51,18 @@ export function LoginForm({
   name: string
   email: string
   emailReadonly?: boolean
+  /**
+   * Hides the sign-in/sign-up toggle. Invitation flows pick the correct mode
+   * server-side (existing users sign in, new users sign up); letting the user
+   * flip manually strands them in the wrong auth mode with a locked email.
+   */
+  modeLocked?: boolean
   invitationStatusMessage?: string
   invitationWorkspaceName?: string
   password: string
   error?: string
   loading?: boolean
+  redirectTarget?: string
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   onNameChange: (value: string) => void
   onEmailChange: (value: string) => void
@@ -68,6 +77,16 @@ export function LoginForm({
       ? `Use this invite email to join ${invitationWorkspaceName}.`
       : `Use the invited account to join ${invitationWorkspaceName}.`
     : undefined
+  // Keeps the invitation redirect alive through the recovery detour so a reset
+  // returns the user to the invite instead of a bare workspace.
+  const forgotPasswordHref = (() => {
+    const params = new URLSearchParams()
+    const trimmedEmail = email.trim()
+    if (trimmedEmail) params.set('email', trimmedEmail)
+    if (redirectTarget) params.set('redirect', redirectTarget)
+    const query = params.toString()
+    return query ? `/forgot-password?${query}` : '/forgot-password'
+  })()
 
   return (
     <div className={cn('flex flex-col', className)}>
@@ -138,11 +157,7 @@ export function LoginForm({
                 <FieldLabel htmlFor="password">Password</FieldLabel>
                 {!isSignup ? (
                   <a
-                    href={
-                      email.trim()
-                        ? `/forgot-password?email=${encodeURIComponent(email.trim())}`
-                        : '/forgot-password'
-                    }
+                    href={forgotPasswordHref}
                     className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline hover:underline-offset-4"
                   >
                     Forgot password?
@@ -195,16 +210,18 @@ export function LoginForm({
               </Button>
             </Field>
 
-            <FieldDescription className="text-center">
-              {isSignup ? 'Already have an account?' : 'New here?'}{' '}
-              <button
-                type="button"
-                onClick={onToggleMode}
-                className="font-medium text-foreground underline underline-offset-4"
-              >
-                {isSignup ? 'Sign in' : 'Create an account'}
-              </button>
-            </FieldDescription>
+            {modeLocked ? null : (
+              <FieldDescription className="text-center">
+                {isSignup ? 'Already have an account?' : 'New here?'}{' '}
+                <button
+                  type="button"
+                  onClick={onToggleMode}
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  {isSignup ? 'Sign in' : 'Create an account'}
+                </button>
+              </FieldDescription>
+            )}
             {isSignup ? (
               <FieldDescription className="text-center text-[11px] leading-4">
                 By creating an account, you agree to our{' '}

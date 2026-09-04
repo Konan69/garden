@@ -71,6 +71,8 @@ export interface UpdateMeRequest {
 export interface CreateMemberRequest {
   email: string
   role?: MemberRole
+  /** Idempotent re-send of an existing pending (or expired) invitation. */
+  resend?: boolean
 }
 
 export interface UpdateMemberRequest {
