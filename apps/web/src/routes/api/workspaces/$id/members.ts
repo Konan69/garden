@@ -15,6 +15,10 @@ import {
 } from '@/lib/server/control-plane'
 import { schema, type Db } from '@/lib/server/db'
 import { sendOrganizationInvitationEmail } from '@/lib/server/email/invitation'
+import {
+  requireWorkspacePermission,
+  workspacePermissions,
+} from '@/lib/server/workspace-permissions'
 
 const logger = createLogger('workspace-members-api')
 
@@ -175,6 +179,21 @@ export const Route = createFileRoute('/api/workspaces/$id/members')({
            * default 48h window), but covering expired rows too.
            */
           if (body.resend) {
+            const permissionResponse = await requireWorkspacePermission({
+              appContext,
+              request,
+              workspaceId: params.id,
+              permissions: workspacePermissions.invitationManage,
+            })
+            if (permissionResponse) {
+              return Result.err(
+                new WorkspaceInvitationRequestError({
+                  message: 'You cannot manage invitations in this workspace',
+                  status: permissionResponse.status,
+                }),
+              )
+            }
+
             const [existing] = await db
               .select()
               .from(schema.invitation)
@@ -187,31 +206,63 @@ export const Route = createFileRoute('/api/workspaces/$id/members')({
               )
               .limit(1)
 
-            if (existing) {
-              // Mirrors Better Auth's invitationExpiresIn default (48h).
-              const refreshedExpiry = new Date(Date.now() + 48 * 3600 * 1000)
+            if (!existing) {
+              return Result.err(
+                new WorkspaceInvitationRequestError({
+                  message: 'Pending invitation not found',
+                  status: 404,
+                }),
+              )
+            }
+
+            // Mirrors Better Auth's invitationExpiresIn default (48h).
+            const refreshedExpiry = new Date(Date.now() + 48 * 3600 * 1000)
+            const [updated] = await db
+              .update(schema.invitation)
+              .set({ expiresAt: refreshedExpiry })
+              .where(
+                and(
+                  eq(schema.invitation.id, existing.id),
+                  eq(schema.invitation.status, 'pending'),
+                ),
+              )
+              .returning({ id: schema.invitation.id })
+
+            if (!updated) {
+              return Result.err(
+                new WorkspaceInvitationRequestError({
+                  message: 'Pending invitation not found',
+                  status: 404,
+                }),
+              )
+            }
+
+            const refreshed = { ...existing, expiresAt: refreshedExpiry }
+            const resendEmailResult = await sendInvitationForRoute({
+              baseURL: new URL(request.url).origin,
+              db,
+              env: appContext.env,
+              invitation: refreshed,
+              inviter: {
+                email: session.user.email,
+                name: session.user.name,
+              },
+            })
+            if (resendEmailResult.isErr()) {
               await db
                 .update(schema.invitation)
-                .set({ expiresAt: refreshedExpiry })
-                .where(eq(schema.invitation.id, existing.id))
-
-              const refreshed = { ...existing, expiresAt: refreshedExpiry }
-              const resendEmailResult = await sendInvitationForRoute({
-                baseURL: new URL(request.url).origin,
-                db,
-                env: appContext.env,
-                invitation: refreshed,
-                inviter: {
-                  email: session.user.email,
-                  name: session.user.name,
-                },
-              })
-              if (resendEmailResult.isErr()) {
-                return Result.err(resendEmailResult.error)
-              }
-
-              return Result.ok(toInvitation(refreshed))
+                .set({ expiresAt: existing.expiresAt })
+                .where(
+                  and(
+                    eq(schema.invitation.id, existing.id),
+                    eq(schema.invitation.status, 'pending'),
+                    eq(schema.invitation.expiresAt, refreshedExpiry),
+                  ),
+                )
+              return Result.err(resendEmailResult.error)
             }
+
+            return Result.ok(toInvitation(refreshed))
           }
 
           const invitation = yield* Result.await(

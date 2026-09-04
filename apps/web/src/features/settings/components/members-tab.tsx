@@ -10,7 +10,7 @@ import {
   X,
   Mail,
   MailWarning,
-  SendHorizonal,
+  SendHorizontal,
 } from 'lucide-react'
 import { ActorAvatar } from '../../common/actor-avatar'
 import type { MemberWithUser, MemberRole, Invitation } from '@garden/core/types'
@@ -224,7 +224,7 @@ function InvitationRow({
             onClick={onResend}
             title={expired ? 'Resend (extends expiry)' : 'Resend invitation'}
           >
-            <SendHorizonal className="h-4 w-4 text-muted-foreground" />
+            <SendHorizontal className="h-4 w-4 text-muted-foreground" />
           </Button>
           <Button
             variant="ghost"

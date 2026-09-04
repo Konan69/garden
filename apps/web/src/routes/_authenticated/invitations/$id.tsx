@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { MailQuestion } from 'lucide-react'
+import { Result } from 'better-result'
+import { toast } from 'sonner'
 import { z } from 'zod'
 import { Badge } from '@garden/ui/components/ui/badge'
 import { Button } from '@garden/ui/components/ui/button'
@@ -129,17 +131,27 @@ function SignOutAndContinueButton({ invitationId }: { invitationId: string }) {
   return (
     <Button
       disabled={pending}
-      onClick={() => {
+      onClick={async () => {
         setPending(true)
-        void authClient
-          .signOut()
-          .catch(() => undefined)
-          .finally(() =>
-            void navigate({
+        const requestResult = await Result.tryPromise({
+          try: () => authClient.signOut(),
+          catch: (cause) => cause,
+        })
+        const signOutResult = requestResult.andThen((response) =>
+          response.error ? Result.err(response.error) : Result.ok(undefined),
+        )
+
+        await signOutResult.match({
+          ok: () =>
+            navigate({
               to: '/login',
               search: { redirect: `/invitations/${invitationId}` },
             }),
-          )
+          err: async () => {
+            setPending(false)
+            toast.error('Could not sign out. Please try again.')
+          },
+        })
       }}
     >
       {pending ? 'Signing out...' : 'Sign out and continue'}

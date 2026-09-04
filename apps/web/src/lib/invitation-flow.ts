@@ -76,7 +76,9 @@ export const invitationUnavailableMessages: Record<
 /** Extracts a Garden invitation id from a sanitized internal redirect target. */
 export function invitationIdFromRedirect(redirectTarget: string | undefined) {
   if (!redirectTarget) return null
-  const url = new URL(redirectTarget, 'https://garden.local')
+  const internalBase = new URL('https://garden.local')
+  const url = new URL(redirectTarget, internalBase)
+  if (url.origin !== internalBase.origin) return null
   const match = /^\/invitations\/([^/]+)$/.exec(url.pathname)
   const id = match?.[1]
   if (!id || !z.string().uuid().safeParse(id).success) return null

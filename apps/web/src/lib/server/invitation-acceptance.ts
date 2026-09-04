@@ -188,6 +188,15 @@ export async function acceptInvitationWithSession(args: {
     organizationName: row.organizationName,
   })
 
+  if (invitation.email.toLowerCase() !== session.user.email.toLowerCase()) {
+    return {
+      status: 'email_mismatch',
+      invitationEmail: invitation.email,
+      organizationName: invitation.organizationName,
+      sessionEmail: session.user.email,
+    }
+  }
+
   const existingMembership = await findInvitationMembership({
     db,
     organizationId: invitation.organizationId,
@@ -229,15 +238,6 @@ export async function acceptInvitationWithSession(args: {
       status: 'unavailable',
       reason: 'expired',
       message: invitationUnavailableMessages.expired,
-    }
-  }
-
-  if (invitation.email.toLowerCase() !== session.user.email.toLowerCase()) {
-    return {
-      status: 'email_mismatch',
-      invitationEmail: invitation.email,
-      organizationName: invitation.organizationName,
-      sessionEmail: session.user.email,
     }
   }
 

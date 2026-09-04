@@ -236,6 +236,36 @@ describe('invitation acceptance (integration)', () => {
     )
   })
 
+  it('does not consume another email invite when the user is already a member', async () => {
+    const suffix = randomUUID()
+    const { org, inviter } = await seedOrganization(testDb, suffix)
+    const invitation = await seedInvitation(testDb, {
+      organizationId: org.id,
+      inviterId: inviter.id,
+      email: `invitee-${suffix}@example.com`,
+    })
+    const otherEmail = `member-${suffix}@example.com`
+    const { requestHeaders, session } = await signUpUser(auth, otherEmail)
+    await testDb.db.insert(schema.member).values({
+      organizationId: org.id,
+      userId: session.user.id,
+      role: 'member',
+    })
+
+    const result = await acceptInvitationWithSession({
+      auth,
+      db: testDb.db,
+      requestHeaders,
+      session,
+      invitationId: invitation.id,
+    })
+
+    expect(result.status).toBe('email_mismatch')
+    expect((await readInvitation(testDb, invitation.id))?.status).toBe(
+      'pending',
+    )
+  })
+
   it.each([
     {
       name: 'expired',
@@ -397,6 +427,7 @@ describe('invitationIdFromRedirect', () => {
   it.each([
     ['relative garbage', '/invitations/not-a-uuid'],
     ['external url', 'https://evil.example/invitations/x'],
+    ['backslash external url', `/\\evil.example/invitations/${randomUUID()}`],
     ['missing id', '/invitations/'],
     ['undefined', undefined],
   ])('rejects %s', (_name, target) => {

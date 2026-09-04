@@ -10,6 +10,7 @@ export const workspacePermissions = {
   agentManage: { agent: ['create', 'update', 'delete'] },
   connectionManage: { connection: ['update'] },
   issueManage: { issue: ['update'] },
+  invitationManage: { invitation: ['create', 'cancel'] },
   permissionManage: { permission: ['approve', 'grant'] },
   skillManage: { skill: ['create', 'update', 'delete'] },
 } satisfies Record<string, WorkspacePermission>
